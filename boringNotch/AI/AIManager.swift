@@ -59,12 +59,17 @@ class AIManager: ObservableObject {
     func start() {
         guard Defaults[.aiEnabled] else { return }
         hookServer?.start()
-        isConnected = true
-        NSLog("AIManager: Started")
+        Task {
+            isConnected = await AIXPCClient.shared.startServer()
+            NSLog("AIManager: Started (XPC server: \(isConnected))")
+        }
     }
 
     func stop() {
         hookServer?.stop()
+        Task {
+            _ = await AIXPCClient.shared.stopServer()
+        }
         sessions.removeAll()
         activeSessionId = nil
         isActive = false
@@ -179,8 +184,10 @@ class AIManager: ObservableObject {
     func approveOnce() async {
         guard let request = currentSession?.permissionRequest else { return }
 
-        // Respond via socket
-        hookServer?.respondToPermission(toolUseId: request.id, decision: "allow")
+        // Respond via XPC (which sends through the socket)
+        _ = await AIXPCClient.shared.respondToPermission(
+            toolUseId: request.id, decision: "allow"
+        )
 
         // Also try tmux
         if let pid = request.pid,
@@ -194,7 +201,9 @@ class AIManager: ObservableObject {
     func approveAlways() async {
         guard let request = currentSession?.permissionRequest else { return }
 
-        hookServer?.respondToPermission(toolUseId: request.id, decision: "allow")
+        _ = await AIXPCClient.shared.respondToPermission(
+            toolUseId: request.id, decision: "allow"
+        )
 
         if let pid = request.pid,
            let target = await TmuxTargetFinder.shared.findTarget(forPID: pid) {
@@ -207,7 +216,9 @@ class AIManager: ObservableObject {
     func reject(reason: String? = nil) async {
         guard let request = currentSession?.permissionRequest else { return }
 
-        hookServer?.respondToPermission(toolUseId: request.id, decision: "deny", reason: reason)
+        _ = await AIXPCClient.shared.respondToPermission(
+            toolUseId: request.id, decision: "deny", reason: reason
+        )
 
         if let pid = request.pid,
            let target = await TmuxTargetFinder.shared.findTarget(forPID: pid) {

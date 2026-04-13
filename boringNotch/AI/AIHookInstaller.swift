@@ -4,8 +4,17 @@ import Foundation
 struct AIHookInstaller {
     static let hookScriptName = "boringnotch-ai-state.py"
 
-    private static let claudeDir = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".claude")
+    /// Real user home directory (not sandbox container)
+    private static let realHomeDir: URL = {
+        // In sandbox, NSHomeDirectory() returns container path.
+        // Use getpwuid to get the real home directory.
+        if let pw = getpwuid(getuid()), let home = pw.pointee.pw_dir {
+            return URL(fileURLWithPath: String(cString: home))
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+    }()
+
+    private static let claudeDir = realHomeDir.appendingPathComponent(".claude")
     static let hooksDir = claudeDir.appendingPathComponent("hooks")
     private static let settingsFile = claudeDir.appendingPathComponent("settings.json")
 
@@ -72,7 +81,7 @@ struct AIHookInstaller {
     }
 
     /// Atomically write JSON data to settings.json
-    /// Writes to a temp file first, then replaces the original
+    /// Uses replaceItem which works in sandboxed environments
     @discardableResult
     private static func writeSettingsSafely(_ json: [String: Any]) -> Bool {
         guard let data = try? JSONSerialization.data(
@@ -83,15 +92,21 @@ struct AIHookInstaller {
             return false
         }
 
-        // Write to temp file first, then atomically replace
+        // Write to temp file first, then replace the original atomically
         let tempFile = settingsFile.appendingPathExtension("tmp")
         do {
+            // Remove stale temp file if any
+            try? FileManager.default.removeItem(at: tempFile)
             try data.write(to: tempFile, options: .atomic)
-            try FileManager.default.moveItem(at: tempFile, to: settingsFile)
+            // replaceItem works in sandbox (unlike moveItem which can't overwrite)
+            if FileManager.default.fileExists(atPath: settingsFile.path) {
+                _ = try FileManager.default.replaceItemAt(settingsFile, withItemAt: tempFile)
+            } else {
+                try FileManager.default.moveItem(at: tempFile, to: settingsFile)
+            }
             return true
         } catch {
             NSLog("AIHookInstaller: Failed to write settings.json: \(error)")
-            // Clean up temp file if move failed
             try? FileManager.default.removeItem(at: tempFile)
             return false
         }

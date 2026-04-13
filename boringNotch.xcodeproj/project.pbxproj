@@ -157,6 +157,9 @@
 		AIAI00180000000000000001 /* AIStatusAnimationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00170000000000000001 /* AIStatusAnimationView.swift */; };
 		AIAI001A00000000000001 /* CompactCapsuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00190000000000000001 /* CompactCapsuleView.swift */; };
 		AIAI001C0000000000000001 /* AISettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI001B0000000000000001 /* AISettingsView.swift */; };
+		AIXP00010000000000000001 /* BoringNotchAIXPCHelper.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = AIXP00050000000000000001 /* BoringNotchAIXPCHelper.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AIXP00020000000000000001 /* BoringNotchAIXPCHelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIXP00060000000000000001 /* BoringNotchAIXPCHelperProtocol.swift */; };
+		AIXP00030000000000000001 /* AIXPCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIXP00070000000000000001 /* AIXPCClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -166,6 +169,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 11F7484E2EC9AABA00F841DB;
 			remoteInfo = BoringNotchXPCHelper;
+		};
+		AIXP00040000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 14CEF40A2C5CAED200855D72 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AIXP000C00000000000001;
+			remoteInfo = BoringNotchAIXPCHelper;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -177,6 +187,7 @@
 			dstSubfolderSpec = 16;
 			files = (
 				11F7485B2EC9AABA00F841DB /* BoringNotchXPCHelper.xpc in Embed XPC Services */,
+				AIXP00010000000000000001 /* BoringNotchAIXPCHelper.xpc in Embed XPC Services */,
 			);
 			name = "Embed XPC Services";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -337,6 +348,9 @@
 		AIAI00170000000000000001 /* AIStatusAnimationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIStatusAnimationView.swift; sourceTree = "<group>"; };
 		AIAI00190000000000000001 /* CompactCapsuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactCapsuleView.swift; sourceTree = "<group>"; };
 		AIAI001B0000000000000001 /* AISettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AISettingsView.swift; sourceTree = "<group>"; };
+		AIXP00050000000000000001 /* BoringNotchAIXPCHelper.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = BoringNotchAIXPCHelper.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
+		AIXP00060000000000000001 /* BoringNotchAIXPCHelperProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoringNotchAIXPCHelperProtocol.swift; sourceTree = "<group>"; };
+		AIXP00070000000000000001 /* AIXPCClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIXPCClient.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -347,15 +361,30 @@
 			);
 			target = 11F7484E2EC9AABA00F841DB /* BoringNotchXPCHelper */;
 		};
+		AIXP00080000000000000001 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = AIXP000C00000000000001 /* BoringNotchAIXPCHelper */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		112FB72F2CCF12CC0015238C /* private */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = private; sourceTree = "<group>"; };
 		11F748502EC9AABA00F841DB /* BoringNotchXPCHelper */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (11F7485C2EC9AABA00F841DB /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = BoringNotchXPCHelper; sourceTree = "<group>"; };
+		AIXP00090000000000000001 /* BoringNotchAIXPCHelper */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (AIXP00080000000000000001 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = BoringNotchAIXPCHelper; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		11F7484C2EC9AABA00F841DB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AIXP000A00000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -480,6 +509,15 @@
 			path = XPCHelperClient;
 			sourceTree = "<group>";
 		};
+		AIXP000B00000000000001 /* XPCHelperClient */ = {
+			isa = PBXGroup;
+			children = (
+				AIXP00060000000000000001 /* BoringNotchAIXPCHelperProtocol.swift */,
+				AIXP00070000000000000001 /* AIXPCClient.swift */,
+			);
+			path = XPCHelperClient;
+			sourceTree = "<group>";
+		};
 		14288DD92C6E015000B9F80C /* helpers */ = {
 			isa = PBXGroup;
 			children = (
@@ -572,6 +610,7 @@
 				112B0EB62E30DD0F00562D6C /* mediaremote-adapter */,
 				14CEF4142C5CAED300855D72 /* boringNotch */,
 				11F748502EC9AABA00F841DB /* BoringNotchXPCHelper */,
+				AIXP00090000000000000001 /* BoringNotchAIXPCHelper */,
 				14CEF4132C5CAED300855D72 /* Products */,
 				14D031EC2C689DB70096E6A1 /* Frameworks */,
 			);
@@ -582,6 +621,7 @@
 			children = (
 				14CEF4122C5CAED300855D72 /* boringNotch.app */,
 				11F7484F2EC9AABA00F841DB /* BoringNotchXPCHelper.xpc */,
+				AIXP00050000000000000001 /* BoringNotchAIXPCHelper.xpc */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -591,6 +631,7 @@
 			children = (
 				AIGRP000000000000000001 /* AI */,
 				11F748672EC9AC9600F841DB /* XPCHelperClient */,
+				AIXP000B00000000000001 /* XPCHelperClient */,
 				116398942DF5D6B40052E6AF /* Providers */,
 				14288DE22C6E016F00B9F80C /* observers */,
 				14288DD92C6E015000B9F80C /* helpers */,
@@ -856,6 +897,28 @@
 			productReference = 11F7484F2EC9AABA00F841DB /* BoringNotchXPCHelper.xpc */;
 			productType = "com.apple.product-type.xpc-service";
 		};
+		AIXP000C00000000000001 /* BoringNotchAIXPCHelper */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AIXP00120000000000000001 /* Build configuration list for PBXNativeTarget "BoringNotchAIXPCHelper" */;
+			buildPhases = (
+				AIXP000E00000000000001 /* Sources */,
+				AIXP000A00000000000001 /* Frameworks */,
+				AIXP000D00000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AIXP00090000000000000001 /* BoringNotchAIXPCHelper */,
+			);
+			name = BoringNotchAIXPCHelper;
+			packageProductDependencies = (
+			);
+			productName = BoringNotchAIXPCHelper;
+			productReference = AIXP00050000000000000001 /* BoringNotchAIXPCHelper.xpc */;
+			productType = "com.apple.product-type.xpc-service";
+		};
 		14CEF4112C5CAED300855D72 /* boringNotch */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 14CEF4212C5CAED400855D72 /* Build configuration list for PBXNativeTarget "boringNotch" */;
@@ -870,6 +933,7 @@
 			);
 			dependencies = (
 				11F7485A2EC9AABA00F841DB /* PBXTargetDependency */,
+				AIXP000F00000000000001 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				112FB72F2CCF12CC0015238C /* private */,
@@ -906,6 +970,9 @@
 					11F7484E2EC9AABA00F841DB = {
 						CreatedOnToolsVersion = 16.4;
 					};
+					AIXP000C00000000000001 = {
+						CreatedOnToolsVersion = 16.4;
+					};
 					14CEF4112C5CAED300855D72 = {
 						CreatedOnToolsVersion = 15.4;
 						LastSwiftMigration = 1540;
@@ -940,12 +1007,20 @@
 			targets = (
 				14CEF4112C5CAED300855D72 /* boringNotch */,
 				11F7484E2EC9AABA00F841DB /* BoringNotchXPCHelper */,
+				AIXP000C00000000000001 /* BoringNotchAIXPCHelper */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		11F7484D2EC9AABA00F841DB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AIXP000D00000000000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -969,6 +1044,13 @@
 
 /* Begin PBXSourcesBuildPhase section */
 		11F7484B2EC9AABA00F841DB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AIXP000E00000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1108,6 +1190,8 @@
 				AIAI00180000000000000001 /* AIStatusAnimationView.swift in Sources */,
 				AIAI001A00000000000001 /* CompactCapsuleView.swift in Sources */,
 				AIAI001C0000000000000001 /* AISettingsView.swift in Sources */,
+				AIXP00020000000000000001 /* BoringNotchAIXPCHelperProtocol.swift in Sources */,
+				AIXP00030000000000000001 /* AIXPCClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1118,6 +1202,11 @@
 			isa = PBXTargetDependency;
 			target = 11F7484E2EC9AABA00F841DB /* BoringNotchXPCHelper */;
 			targetProxy = 11F748592EC9AABA00F841DB /* PBXContainerItemProxy */;
+		};
+		AIXP000F00000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AIXP000C00000000000001 /* BoringNotchAIXPCHelper */;
+			targetProxy = AIXP00040000000000000001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1164,6 +1253,56 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 2.7.3;
 				PRODUCT_BUNDLE_IDENTIFIER = theboringteam.boringnotch.BoringNotchXPCHelper;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		AIXP00100000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = BoringNotchAIXPCHelper/BoringNotchAIXPCHelper.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 271;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BoringNotchAIXPCHelper/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = BoringNotchAIXPCHelper;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 2.7.3;
+				PRODUCT_BUNDLE_IDENTIFIER = theboringteam.boringnotch.BoringNotchAIXPCHelper;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AIXP00110000000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = BoringNotchAIXPCHelper/BoringNotchAIXPCHelper.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 271;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BoringNotchAIXPCHelper/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = BoringNotchAIXPCHelper;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 2.7.3;
+				PRODUCT_BUNDLE_IDENTIFIER = theboringteam.boringnotch.BoringNotchAIXPCHelper;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SKIP_INSTALL = YES;
@@ -1411,6 +1550,15 @@
 			buildConfigurations = (
 				11F7485E2EC9AABA00F841DB /* Debug */,
 				11F7485F2EC9AABA00F841DB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AIXP00120000000000000001 /* Build configuration list for PBXNativeTarget "BoringNotchAIXPCHelper" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AIXP00100000000000000001 /* Debug */,
+				AIXP00110000000000000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
