@@ -284,9 +284,6 @@ struct ContentView: View {
                             .frame(width: 76, alignment: .trailing)
                         }
                         .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
-                      } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && (coordinator.sneakPeek.type != .ai) && vm.notchState == .closed {
-                          InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
-                              .transition(.opacity)
                       } else if coordinator.sneakPeek.show && coordinator.sneakPeek.type == .ai && vm.notchState == .closed && AIManager.shared.isActive && Defaults[.aiShowInNotch] {
                           AILiveActivity()
                               .frame(alignment: .center)
@@ -304,11 +301,12 @@ struct ContentView: View {
                        }
 
                       if coordinator.sneakPeek.show {
-                          if (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && (coordinator.sneakPeek.type != .ai) && !Defaults[.inlineHUD] && vm.notchState == .closed {
+                          if (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && (coordinator.sneakPeek.type != .ai) && (coordinator.sneakPeek.type != .settings) && !Defaults[.inlineHUD] && vm.notchState == .closed {
                               SystemEventIndicatorModifier(
                                   eventType: $coordinator.sneakPeek.type,
                                   value: $coordinator.sneakPeek.value,
                                   icon: $coordinator.sneakPeek.icon,
+                                  message: $coordinator.sneakPeek.message,
                                   sendEventBack: { newVal in
                                       switch coordinator.sneakPeek.type {
                                       case .volume:
@@ -332,6 +330,19 @@ struct ContentView: View {
                                       GeometryReader { geo in
                                           MarqueeText(.constant(musicManager.songTitle + " - " + musicManager.artistName),  textColor: Defaults[.playerColorTinting] ? Color(nsColor: musicManager.avgColor).ensureMinimumBrightness(factor: 0.6) : .gray, minDuration: 1, frameWidth: geo.size.width)
                                       }
+                                  }
+                                  .foregroundStyle(.gray)
+                                  .padding(.bottom, 10)
+                              }
+                          }
+                          // Settings peek - shown below notch like music
+                          else if coordinator.sneakPeek.type == .settings {
+                              if vm.notchState == .closed {
+                                  HStack(alignment: .center, spacing: 8) {
+                                      Image(systemName: "gear")
+                                      Text(coordinator.sneakPeek.message)
+                                      Text(coordinator.sneakPeek.icon.contains("checkmark") ? "✓" : "✗")
+                                          .foregroundStyle(coordinator.sneakPeek.icon.contains("checkmark") ? .green : .red)
                                   }
                                   .foregroundStyle(.gray)
                                   .padding(.bottom, 10)

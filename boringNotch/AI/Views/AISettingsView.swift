@@ -66,7 +66,7 @@ struct AISettingsView: View {
                     Button("Reinstall") {
                         AIHookInstaller.installIfNeeded()
                         hookInstalled = AIHookInstaller.isInstalled()
-                        showFeedback(success: hookInstalled)
+                        showFeedback(success: hookInstalled, message: "Hooks reinstall")
                     }
 
                     Button("Uninstall") {
@@ -117,18 +117,19 @@ struct AISettingsView: View {
     private func performUninstall() {
         AIHookInstaller.uninstall()
         hookInstalled = AIHookInstaller.isInstalled()
-        showFeedback(success: !hookInstalled)
+        showFeedback(success: !hookInstalled, message: "Hooks uninstall")
     }
 
     /// Show peek feedback using .settings type.
     /// Always renders via InlineHUD/SystemEventIndicator, never conflicts with AI status.
-    private func showFeedback(success: Bool) {
+    private func showFeedback(success: Bool, message: String = "Hooks") {
         let coordinator = BoringViewCoordinator.shared
         coordinator.toggleSneakPeek(
             status: true,
             type: .settings,
             duration: 2.0,
             icon: success ? "checkmark.circle" : "xmark.circle",
+            message: message,
             persistent: false
         )
     }

@@ -27,6 +27,7 @@ struct sneakPeek {
     var type: SneakContentType = .music
     var value: CGFloat = 0
     var icon: String = ""
+    var message: String = ""
     var persistent: Bool = false
 }
 
@@ -210,22 +211,25 @@ class BoringViewCoordinator: ObservableObject {
 
     func toggleSneakPeek(
         status: Bool, type: SneakContentType, duration: TimeInterval = 1.5, value: CGFloat = 0,
-        icon: String = "", persistent: Bool = false
+        icon: String = "", message: String = "", persistent: Bool = false
     ) {
         sneakPeekDuration = duration
-        sneakPeek.persistent = persistent
-        if type != .music {
-            // close()
+        if type != .music && type != .settings {
             if !Defaults[.hudReplacement] {
                 return
             }
         }
-        Task { @MainActor in
+
+        DispatchQueue.main.async {
             withAnimation(.smooth) {
-                self.sneakPeek.show = status
-                self.sneakPeek.type = type
-                self.sneakPeek.value = value
-                self.sneakPeek.icon = icon
+                self.sneakPeek = .init(
+                    show: status,
+                    type: type,
+                    value: value,
+                    icon: icon,
+                    message: message,
+                    persistent: persistent
+                )
             }
         }
 

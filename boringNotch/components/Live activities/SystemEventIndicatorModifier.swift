@@ -20,6 +20,7 @@ struct SystemEventIndicatorModifier: View {
         }
     }
     @Binding var icon: String
+    @Binding var message: String
     let showSlider: Bool = false
     var sendEventBack: (CGFloat) -> Void
     
@@ -72,9 +73,15 @@ struct SystemEventIndicatorModifier: View {
                         .monospacedDigit()
                         .frame(width: 35, alignment: .trailing)
                 }
-            } else {
+            } else if eventType == .mic {
                 Text("Mic \(value > 0 ? "unmuted" : "muted")")
                     .foregroundStyle(.gray)
+                    .lineLimit(1)
+                    .allowsTightening(true)
+            } else if eventType == .settings {
+                let success = icon.contains("checkmark")
+                Text("\(message.isEmpty ? "Hooks" : message) \(success ? "Done" : "Failed")")
+                    .foregroundStyle(success ? .green : .orange)
                     .lineLimit(1)
                     .allowsTightening(true)
             }
