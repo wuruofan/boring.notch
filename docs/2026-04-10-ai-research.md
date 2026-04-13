@@ -633,45 +633,68 @@ def send_event(state):
 
 **理解度**: ✅ 90%
 
-### 4.3 SocketServer 实现
+### 4.3 SocketServer 实现（XPC 架构）
 
-**核心代码**: `HookSocketServer.swift`
+**核心问题**: BoringNotch 主 app 运行在 App Sandbox 中，无法 `bind()` Unix Domain Socket。
+
+**解决方案**: 新增 `BoringNotchAIXPCHelper` XPC Service（沙盒关闭），遵循与 `BoringNotchXPCHelper`（MediaRemote/IOKit）相同的架构模式。
+
+**架构图**:
+
+```
+Claude Code → Python Hook → /tmp/boringnotch-ai.sock
+                                    ↓
+                        BoringNotchAIXPCHelper (XPC, sandbox OFF)
+                        └── AIHookServerCore: Socket 服务端
+                            ├── 接收事件 → 写入 /tmp/boringnotch-ai-state.json
+                            └── 保持权限请求连接，等待 XPC 响应
+                                    ↓ 文件监听
+                        boringNotch (主 app, sandbox ON)
+                        └── AIHookServer: DispatchSourceFileSystemObject
+                            └── AIManager → UI 更新
+
+权限响应链:
+UI → AIManager → AIXPCClient → XPC → AIHookServerCore → Socket Client → Python Hook → Claude Code
+```
+
+**XPC Helper 代码**: `BoringNotchAIXPCHelper/AIHookServerCore.swift`
 
 ```swift
-class HookSocketServer {
-    static let socketPath = "/tmp/claude-island.sock"
+class AIHookServerCore {
+    static let socketPath = "/tmp/boringnotch-ai.sock"
+    static let stateFilePath = "/tmp/boringnotch-ai-state.json"
 
-    // 启动服务端
-    func start(onEvent: @escaping HookEventHandler, ...)
-
-    // 响应权限请求
-    func respondToPermission(toolUseId: String, decision: String, reason: String?)
-
-    // 等待中的权限请求
-    private var pendingPermissions: [String: PendingPermission]
-}
-
-struct HookEvent: Codable {
-    let sessionId: String
-    let cwd: String
-    let event: String      // PreToolUse, PermissionRequest, etc.
-    let status: String     // waiting_for_approval, running_tool, processing
-    let tool: String?
-    let toolInput: [String: AnyCodable]?
-    let toolUseId: String?
-    let pid: Int?
-    let tty: String?
+    func start()        // 创建 Socket、监听连接
+    func stop()         // 关闭 Socket、清理状态文件
+    func respondToPermission(toolUseId:decision:reason:)  // 通过 Socket 响应
 }
 ```
 
+**XPC Protocol**: `BoringNotchAIXPCHelperProtocol`
+
+```swift
+@objc protocol BoringNotchAIXPCHelperProtocol {
+    func startServer(with reply: @escaping (Bool) -> Void)
+    func stopServer(with reply: @escaping (Bool) -> Void)
+    func isServerRunning(with reply: @escaping (Bool) -> Void)
+    func respondToPermission(toolUseId: String, decision: String, reason: String?, with reply: @escaping (Bool) -> Void)
+    func respondToPermissionBySession(sessionId: String, decision: String, reason: String?, with reply: @escaping (Bool) -> Void)
+    func hasPendingPermission(sessionId: String, with reply: @escaping (Bool) -> Void)
+    func getSocketPath(with reply: @escaping (String) -> Void)
+}
+```
+
+**主 app 客户端**: `AIXPCClient` (使用 AsyncXPCConnection)
+
+**主 app 事件监听**: `AIHookServer` 监听 `/tmp/boringnotch-ai-state.json` 文件变化
+
 **关键技术点**:
-1. GCD DispatchSource 实现非阻塞 I/O
-2. PermissionRequest 时保持连接，等待用户决策后写入响应
-3. 使用 `AnyCodable` 处理动态 JSON
+1. XPC Helper 沙盒关闭，可自由创建 Socket
+2. 事件数据通过文件传递（Helper 写 → 主 app 监听）
+3. 权限响应通过 XPC 调用传递（主 app → Helper → Socket client）
+4. 遵循 BoringNotchXPCHelper 现有架构模式
 
-**理解度**: ✅ 90%
-
-**移植方案**: 直接复制 HookSocketServer.swift，修改 socket 路径为 `/tmp/boringnotch-ai.sock`
+**理解度**: ✅ 95%
 
 ### 4.4 回复机制（tmux send-keys）
 
@@ -848,10 +871,11 @@ var viewModels: [String: BoringViewModel] = [:] // UUID → BoringViewModel
 
 | 决策 | 方案 | 原因 |
 |------|------|------|
-| 通信协议 | Unix Domain Socket | Claude-Island 已验证可行 |
+| 通信协议 | Unix Domain Socket（XPC Helper 内运行） | Claude-Island 已验证可行；主 app 沙盒无法 bind，需 XPC |
 | 回复机制 | tmux send-keys（主） + 跳转终端（降级） | 跨终端统一方案 |
 | 状态管理 | 新建 AIManager.shared 单例 | 遵循现有架构模式 |
 | Socket 路径 | `/tmp/boringnotch-ai.sock` | 避免与 Claude-Island 冲突 |
+| **沙盒兼容** | XPC Helper（sandbox OFF）+ 文件监听 | 主 app 保持沙盒，XPC Helper 运行 Socket |
 | 配置存储 | Defaults 库 | 与现有代码一致 |
 | 动画方式 | SwiftUI matchedGeometryEffect + spring | 与音乐模块一致 |
 | **Compact 布局** | 单胶囊 + 内部分区 | 音乐保持原样式，AI元素从两侧入场 |
@@ -990,33 +1014,48 @@ HStack(spacing: 0) {
 
 ```
 boringNotch/
-├── boringNotchApp.swift              # 应用入口 ← SocketServer 初始化
+├── boringNotchApp.swift              # 应用入口 ← AIManager 初始化
 ├── BoringViewCoordinator.swift       # 视图协调器 ← 添加 AI Peek 支持
 ├── ContentView.swift                 # 主视图 ← 添加 AI Live Activity
 ├── models/
 │   ├── BoringViewModel.swift         # 窗口状态
 │   └── Constants.swift               # Defaults Keys ← 添加 AI 配置项
-├── managers/
-│   ├── MusicManager.swift            # 音乐管理
-│   └── [新增] AIManager.swift        # AI 状态管理
+├── XPCHelperClient/
+│   ├── BoringNotchXPCHelperProtocol.swift  # MediaRemote XPC 协议
+│   ├── XPCHelperClient.swift               # MediaRemote XPC 客户端
+│   ├── BoringNotchAIXPCHelperProtocol.swift # AI XPC 协议
+│   └── AIXPCClient.swift                   # AI XPC 客户端
 ├── components/
 │   ├── Notch/NotchHomeView.swift     # Expanded 视图 ← 添加双展开支持
 │   ├── Settings/SettingsView.swift   # 设置界面 ← 添加 AI 设置
 │   └── Live activities/
 │       └── InlineHUD.swift           # Peek HUD
-└── [新增] AI/
-    ├── AIHookServer.swift            # Socket 服务端
-    ├── AIHookInstaller.swift         # Hook 安装
-    ├── TmuxController.swift          # tmux 控制
+└── AI/
+    ├── AIManager.swift               # AI 状态管理（@MainActor 单例）
+    ├── AIHookServer.swift            # 文件监听（读 XPC Helper 写入的状态文件）
+    ├── AIHookInstaller.swift         # Hook 安装（备份+原子写入）
+    ├── Models/
+    │   ├── AISessionState.swift      # Session 状态模型
+    │   └── AIHookEvent.swift         # Hook 事件模型
+    ├── Tmux/
+    │   ├── TmuxController.swift      # tmux 操作
+    │   ├── TmuxTargetFinder.swift    # Target 查找
+    │   └── ToolApprovalHandler.swift # 回复实现
     └── Views/
         ├── AILiveActivity.swift      # Compact 视图（图标+动画）
         ├── AIExpandedView.swift      # AI单独展开视图（全黑）
-        ├── AICompactCapsule.swift    # 双激活时Compact胶囊
         ├── CompactCapsuleView.swift  # 统一Compact视图（音乐+AI组合）
         ├── AgentIconView.swift       # Agent图标组件
-        ├── AIStatusAnimation.swift   # AI状态动画（thinking/waiting）
-        ├── DividerLine.swift         # 分割线组件
+        ├── AIStatusAnimationView.swift # AI状态动画
         └── AISettingsView.swift      # AI设置面板
+
+BoringNotchAIXPCHelper/              # XPC Service（sandbox OFF）
+├── BoringNotchAIXPCHelperProtocol.swift  # XPC 协议
+├── BoringNotchAIXPCHelper.swift          # XPC 实现
+├── AIHookServerCore.swift                # Socket 服务端核心
+├── main.swift                            # XPC 入口
+├── Info.plist
+└── BoringNotchAIXPCHelper.entitlements   # sandbox = false
 ```
 
 ### Claude-Island 参考文件
@@ -1103,3 +1142,4 @@ boringNotch/
 | 2026-04-10 | **验证 BoringNotch 编译：BUILD SUCCEEDED**，开发环境就绪 |
 | 2026-04-13 | 文档评审修复：修正章节编号层级、修复 Compact 布局代码示例（AI单独时宽度计算）、补充错误场景分析、性能关注点、persistent Peek 清理机制 |
 | 2026-04-13 | 补充 settings.json 安全保护机制：自动备份（不覆盖已有备份）、原子写入、恢复方式 |
+| 2026-04-13 | 架构变更：新增 BoringNotchAIXPCHelper（XPC Service, sandbox OFF）运行 Socket 服务端，主 app 通过文件监听接收事件、XPC 调用发送权限响应。更新 4.3 节、7.1 节、8 节 |

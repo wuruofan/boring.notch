@@ -2,6 +2,7 @@
 
 - **创建日期**: 2026-04-13
 - **对应实现**: `docs/2026-04-10-ai-research.md`
+- **架构**: XPC Helper（sandbox OFF）运行 Socket + 主 app（sandbox ON）文件监听
 
 ---
 
@@ -17,15 +18,23 @@ xcodebuild -scheme boringNotch -configuration Debug build
 
 ## 2. 基础设施验证（无需 Claude Code）
 
-### 2.1 Socket 服务
+### 2.1 XPC Helper + Socket 服务
 
 启动 BoringNotch 后：
 
 ```bash
+# Socket 文件
 ls -la /tmp/boringnotch-ai.sock
-```
+# 预期：文件存在，权限 777
 
-**预期**: 文件存在，权限 777
+# XPC bundle 嵌入
+ls boringNotch.app/Contents/XPCServices/BoringNotchAIXPCHelper.xpc
+# 预期：目录存在
+
+# 状态文件（事件触发后才会出现）
+ls -la /tmp/boringnotch-ai-state.json
+# 预期：发送事件后文件存在
+```
 
 ### 2.2 Hook 脚本安装
 
