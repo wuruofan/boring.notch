@@ -47,6 +47,10 @@ struct InlineHUD: View {
                                 .symbolVariant(value > 0 ? .none : .slash)
                                 .contentTransition(.interpolate)
                                 .frame(width: 20, height: 15, alignment: .center)
+                        case .settings:
+                            Image(systemName: icon.isEmpty ? "gear" : icon)
+                                .contentTransition(.interpolate)
+                                .frame(width: 20, height: 15, alignment: .center)
                         default:
                             EmptyView()
                     }
@@ -71,6 +75,14 @@ struct InlineHUD: View {
                 if (type == .mic) {
                     Text(value.isZero ? "muted" : "unmuted")
                         .foregroundStyle(.gray)
+                        .lineLimit(1)
+                        .allowsTightening(true)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .contentTransition(.interpolate)
+                } else if (type == .settings) {
+                    Text(icon.isEmpty ? "Done" : (icon.contains("checkmark") ? "Done" : "Failed"))
+                        .foregroundStyle(icon.contains("checkmark") ? .green : .orange)
                         .lineLimit(1)
                         .allowsTightening(true)
                         .multilineTextAlignment(.trailing)

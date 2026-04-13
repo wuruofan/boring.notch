@@ -66,7 +66,7 @@ struct AISettingsView: View {
                     Button("Reinstall") {
                         AIHookInstaller.installIfNeeded()
                         hookInstalled = AIHookInstaller.isInstalled()
-                        showFeedback(success: hookInstalled)
+                        showPeek(icon: hookInstalled ? "checkmark.circle" : "xmark.circle")
                     }
 
                     Button("Uninstall") {
@@ -117,18 +117,18 @@ struct AISettingsView: View {
     private func performUninstall() {
         AIHookInstaller.uninstall()
         hookInstalled = AIHookInstaller.isInstalled()
-        showFeedback(success: !hookInstalled)
+        showPeek(icon: !hookInstalled ? "checkmark.circle" : "xmark.circle")
     }
 
-    /// Show peek feedback using .settings type.
-    /// Always renders via InlineHUD/SystemEventIndicator, never conflicts with AI status.
-    private func showFeedback(success: Bool) {
+    /// Show feedback via notch peek. Uses .download type so it works
+    /// regardless of whether AI is currently active.
+    private func showPeek(icon: String) {
         let coordinator = BoringViewCoordinator.shared
         coordinator.toggleSneakPeek(
             status: true,
-            type: .settings,
+            type: .download,
             duration: 2.0,
-            icon: success ? "checkmark.circle" : "xmark.circle",
+            icon: icon,
             persistent: false
         )
     }

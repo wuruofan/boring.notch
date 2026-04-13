@@ -55,10 +55,15 @@ struct SystemEventIndicatorModifier: View {
                         .contentTransition(.interpolate)
                         .frame(width: 20, height: 15)
                         .foregroundStyle(.white)
+                case .settings:
+                    Image(systemName: icon.isEmpty ? "gear" : icon)
+                        .contentTransition(.interpolate)
+                        .frame(width: 20, height: 15)
+                        .foregroundStyle(.white)
                 default:
                     EmptyView()
             }
-            if (eventType != .mic) {
+            if (eventType != .mic && eventType != .settings) {
                 DraggableProgressBar(value: $value)
                 if Defaults[.showClosedNotchHUDPercentage] {
                     Text("\(Int(value * 100))%")
