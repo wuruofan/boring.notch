@@ -6,7 +6,7 @@ struct AISettingsView: View {
     @Default(.aiShowInNotch) var aiShowInNotch
     @Default(.aiAutoInstallHooks) var aiAutoInstallHooks
     @Default(.aiScreenMode) var aiScreenMode
-    @ObservedObject var coordinator = BoringViewCoordinator.shared
+    @Default(.aiPreferredScreenUUID) var aiPreferredScreenUUID
     @ObservedObject var aiManager = AIManager.shared
 
     @State private var screens: [(uuid: String, name: String)] = NSScreen.screens.compactMap { screen in
@@ -40,7 +40,8 @@ struct AISettingsView: View {
                 .disabled(!aiEnabled)
 
                 if aiScreenMode == .separate {
-                    Picker("Preferred display", selection: $coordinator.preferredScreenUUID) {
+                    Picker("Preferred display", selection: $aiPreferredScreenUUID) {
+                        Text("Auto").tag(nil as String?)
                         ForEach(screens, id: \.uuid) { screen in
                             Text(screen.name).tag(screen.uuid as String?)
                         }
