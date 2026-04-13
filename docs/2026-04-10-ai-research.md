@@ -250,11 +250,12 @@ struct CompactCapsuleView: View {
                         AlbumArtView()
                         Spacer()
                         AudioSpectrumView()
-                    } else if aiManager.isActive && !musicManager.isPlaying {
-                        Spacer()  // AI单独时中间空白
+                    } else if aiManager.isActive {
+                        // AI单独时中间空白，右侧有状态动画
+                        Spacer()
                     }
 
-                    // AI右侧
+                    // AI右侧状态动画
                     if aiManager.isActive {
                         DividerLine()
                             .transition(.opacity)
@@ -269,10 +270,13 @@ struct CompactCapsuleView: View {
 
     var capsuleWidth: CGFloat {
         let musicWidth: CGFloat = 120
-        let aiExtra: CGFloat = 44  // AI图标20 + 动画20 + 分割线4
+        let aiWidth: CGFloat = 120  // AI单独时的宽度（图标20 + 动画20 + 间距 + padding）
+        let aiExtra: CGFloat = 44   // AI图标20 + 动画20 + 分割线4（双激活时额外宽度）
 
         if musicManager.isPlaying && aiManager.isActive {
             return musicWidth + aiExtra
+        } else if aiManager.isActive && !musicManager.isPlaying {
+            return aiWidth
         }
         return musicWidth
     }
@@ -714,16 +718,29 @@ actor ToolApprovalHandler {
 
 ### 4.5 Hook 安装机制
 
-**核心代码**: `HookInstaller.swift`
+**核心代码**: `AIHookInstaller.swift`
 
 ```swift
-struct HookInstaller {
+struct AIHookInstaller {
     static func installIfNeeded() {
         // 1. 复制 Python 脚本到 ~/.claude/hooks/
-        // 2. 更新 ~/.claude/settings.json 注册 hook 事件
+        // 2. 备份 settings.json（首次修改前，不覆盖已有备份）
+        // 3. 更新 ~/.claude/settings.json 注册 hook 事件（原子写入）
+    }
+
+    static func uninstall() {
+        // 1. 删除 Python 脚本
+        // 2. 备份 settings.json
+        // 3. 从 settings.json 移除 hook 条目（原子写入）
     }
 }
 ```
+
+**settings.json 安全保护机制**:
+- **自动备份**: 首次修改前将 `settings.json` 备份为 `settings.json.boringnotch-backup`，不覆盖已有备份（保留用户原始配置）
+- **原子写入**: 先写入临时文件，成功后再替换原文件，防止写入中断导致文件损坏
+- **追加而非覆盖**: 安装时读取现有 hooks 数组追加，卸载时仅移除自身条目
+- **恢复方式**: 如配置损坏，执行 `cp ~/.claude/settings.json.boringnotch-backup ~/.claude/settings.json`
 
 **settings.json 格式**:
 ```json
@@ -797,7 +814,26 @@ var viewModels: [String: BoringViewModel] = [:] // UUID → BoringViewModel
 | 添加 AI 组件后的性能 | 用户体验 | ❌ 未验证 |
 | ~~AI 状态多显示器策略~~ | ~~UI 设计决策~~ | ✅ **已确认** |
 
-### 6.3 低优先级
+### 6.3 错误场景分析
+
+| 场景 | 影响 | 应对策略 |
+|------|------|----------|
+| Socket 连接断开 | AI 状态停止更新 | AIManager 检测断连后自动重连，UI 显示断连状态 |
+| Hook 脚本崩溃 | 事件丢失 | HookInstaller 检测脚本不存在时重新安装；Claude 侧 hook 失败静默忽略 |
+| 多个 Claude 实例同时运行 | 事件交错 | 通过 `sessionId` 区分不同会话，UI 支持会话切换或显示最新活跃会话 |
+| `~/.claude/settings.json` 已有自定义 hooks | Hook 冲突/覆盖 | 安装时读取现有 hooks 数组，追加而非覆盖；卸载时仅移除自身条目；**首次修改前自动备份到 `settings.json.boringnotch-backup`（不覆盖已有备份）；写入采用原子操作（先写临时文件再替换），防止写入中断导致文件损坏** |
+| AI crash 后 persistent Peek 未清除 | Peek 永远显示 | AIManager 添加 `deinit` 清除 persistent 状态；Socket 断连时自动清除；设置超时上限（如 10 分钟） |
+
+### 6.4 性能关注点
+
+| 指标 | 关注原因 | 目标 |
+|------|----------|------|
+| Socket 事件处理延迟 | 影响状态显示实时性 | < 100ms |
+| 动画帧率 | Compact/Expanded 过渡流畅度 | 60fps |
+| AIManager 内存占用 | 常驻后台 | < 5MB |
+| Hook 脚本执行耗时 | 影响 Claude 响应速度 | < 50ms |
+
+### 6.5 低优先级
 
 | 问题 | 影响 | 状态 |
 |------|------|------|
@@ -829,9 +865,7 @@ var viewModels: [String: BoringViewModel] = [:] // UUID → BoringViewModel
 |------|----------|----------|
 | ~~iTerm2 AppleScript 支持~~ | ~~Phase 1 vs Phase 2~~ | ✅ **已确认：Phase 2** |
 
----
-
-## 7.3 终端支持策略（已确认）
+### 7.3 终端支持策略（已确认）
 
 
 ### 回复能力矩阵
@@ -868,7 +902,7 @@ var viewModels: [String: BoringViewModel] = [:] // UUID → BoringViewModel
 
 ---
 
-## 7.4 多显示器策略（已确认）
+### 7.4 多显示器策略（已确认）
 
 ### 设置项设计
 
@@ -1067,3 +1101,5 @@ boringNotch/
 | 2026-04-10 | 确认多显示器策略：AI独立显示器设置，支持音乐和AI分屏显示，完成UI状态矩阵 |
 | 2026-04-10 | 确认终端支持策略：iTerm2放Phase 2，非tmux终端降级为跳转终端 |
 | 2026-04-10 | **验证 BoringNotch 编译：BUILD SUCCEEDED**，开发环境就绪 |
+| 2026-04-13 | 文档评审修复：修正章节编号层级、修复 Compact 布局代码示例（AI单独时宽度计算）、补充错误场景分析、性能关注点、persistent Peek 清理机制 |
+| 2026-04-13 | 补充 settings.json 安全保护机制：自动备份（不覆盖已有备份）、原子写入、恢复方式 |
