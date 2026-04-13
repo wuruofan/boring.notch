@@ -31,7 +31,7 @@
 | 应用启动流程 | ✅ 80% | 高 | 已完整阅读 |
 | Settings 系统 | ✅ 75% | 高 | Defaults 库使用方式已理解 |
 | 动画系统 | ✅ 75% | 高 | matchedGeometryEffect、transition |
-| 多显示器支持 | ⚠️ 60% | 中 | 每显示器独立 ViewModel |
+| 多显示器支持 | ✅ 75% | 高 | 代码位置已补充，AI分屏策略已确认 |
 
 ---
 
@@ -754,12 +754,21 @@ var windows: [String: NSWindow] = [:]      // UUID → NSWindow
 var viewModels: [String: BoringViewModel] = [:] // UUID → BoringViewModel
 ```
 
+**关键代码位置**:
+| 功能 | 文件:行号 | 说明 |
+|------|----------|------|
+| preferredScreenUUID 定义 | `BoringViewCoordinator.swift:89` | `@AppStorage("preferred_screen_uuid")` |
+| selectedScreenUUID 初始化 | `BoringViewCoordinator.swift:124` | `selectedScreenUUID = preferredScreenUUID ?? ...` |
+| 窗口透明度控制 | `boringNotchApp.swift:314` | `alphaValue = selectedScreenUUID == preferredScreenUUID ? 1 : 0` |
+| 窗口创建位置选择 | `boringNotchApp.swift:514-515` | 根据 preferredScreenUUID 设置窗口位置 |
+| 设置界面 Picker | `SettingsView.swift:170` | `Picker("Preferred display", selection: $coordinator.preferredScreenUUID)` |
+
 **AI 状态显示策略**:
 - AI 状态应该只在**一个**显示器显示（避免混乱）
 - 建议跟随 `preferredScreenUUID` 或 `selectedScreenUUID`
 - 或者跟随当前活跃窗口所在的显示器
 
-**理解度**: ⚠️ 60%
+**理解度**: ✅ 75%（已补充代码位置）
 
 ---
 
@@ -819,7 +828,7 @@ var viewModels: [String: BoringViewModel] = [:] // UUID → BoringViewModel
 
 ---
 
-## 7.4 终端支持策略（已确认）
+## 7.3 终端支持策略（已确认）
 
 
 ### 回复能力矩阵
@@ -856,7 +865,7 @@ var viewModels: [String: BoringViewModel] = [:] // UUID → BoringViewModel
 
 ---
 
-## 7.3 多显示器策略（已确认）
+## 7.4 多显示器策略（已确认）
 
 ### 设置项设计
 
