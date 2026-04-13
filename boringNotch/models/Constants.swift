@@ -199,4 +199,11 @@ extension Defaults.Keys {
     }
 
     static let didClearLegacyURLCacheV1 = Key<Bool>("didClearLegacyURLCache_v1", default: false)
+
+    // MARK: AI Integration
+    static let aiEnabled = Key<Bool>("aiEnabled", default: true)
+    static let aiShowInNotch = Key<Bool>("aiShowInNotch", default: true)
+    static let aiAutoInstallHooks = Key<Bool>("aiAutoInstallHooks", default: true)
+    static let aiScreenMode = Key<AIScreenMode>("aiScreenMode", default: .followNotch)
+    static let aiPreferredScreenUUID = Key<String?>("aiPreferredScreenUUID", default: nil)
 }

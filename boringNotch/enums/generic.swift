@@ -27,6 +27,7 @@ public enum NotchState {
 public enum NotchViews {
     case home
     case shelf
+    case ai
 }
 
 enum SettingsEnum {
@@ -66,4 +67,9 @@ enum SliderColorEnum: String, CaseIterable, Defaults.Serializable {
     case white = "White"
     case albumArt = "Match album art"
     case accent = "Accent color"
+}
+
+enum AIScreenMode: String, Defaults.Serializable {
+    case followNotch
+    case separate
 }

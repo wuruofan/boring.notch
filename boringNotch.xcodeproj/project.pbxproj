@@ -143,6 +143,20 @@
 		B1F747F92EC7E94000F841DB /* LottieView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F747F82EC7E94000F841DB /* LottieView.swift */; };
 		B1FEB4992C7686630066EBBC /* PanGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1FEB4982C7686630066EBBC /* PanGesture.swift */; };
 		F38DE6482D8243E7008B5C6D /* BatteryActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F38DE6472D8243E2008B5C6D /* BatteryActivityManager.swift */; };
+		AIAI00020000000000000001 /* AIManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00010000000000000001 /* AIManager.swift */; };
+		AIAI00040000000000000001 /* AIHookServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00030000000000000001 /* AIHookServer.swift */; };
+		AIAI00060000000000000001 /* AIHookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00050000000000000001 /* AIHookInstaller.swift */; };
+		AIAI00080000000000000001 /* AISessionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00070000000000000001 /* AISessionState.swift */; };
+		AIAI000A00000000000001 /* AIHookEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00090000000000000001 /* AIHookEvent.swift */; };
+		AIAI000C0000000000000001 /* TmuxController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI000B0000000000000001 /* TmuxController.swift */; };
+		AIAI000E0000000000000001 /* TmuxTargetFinder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI000D0000000000000001 /* TmuxTargetFinder.swift */; };
+		AIAI0010000000000000001 /* ToolApprovalHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI000F0000000000000001 /* ToolApprovalHandler.swift */; };
+		AIAI00120000000000000001 /* AILiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00110000000000000001 /* AILiveActivity.swift */; };
+		AIAI00140000000000000001 /* AIExpandedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00130000000000000001 /* AIExpandedView.swift */; };
+		AIAI00160000000000000001 /* AgentIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00150000000000000001 /* AgentIconView.swift */; };
+		AIAI00180000000000000001 /* AIStatusAnimationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00170000000000000001 /* AIStatusAnimationView.swift */; };
+		AIAI001A00000000000001 /* CompactCapsuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00190000000000000001 /* CompactCapsuleView.swift */; };
+		AIAI001C0000000000000001 /* AISettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI001B0000000000000001 /* AISettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -309,6 +323,20 @@
 		B1F747F82EC7E94000F841DB /* LottieView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LottieView.swift; sourceTree = "<group>"; };
 		B1FEB4982C7686630066EBBC /* PanGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanGesture.swift; sourceTree = "<group>"; };
 		F38DE6472D8243E2008B5C6D /* BatteryActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryActivityManager.swift; sourceTree = "<group>"; };
+		AIAI00010000000000000001 /* AIManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIManager.swift; sourceTree = "<group>"; };
+		AIAI00030000000000000001 /* AIHookServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIHookServer.swift; sourceTree = "<group>"; };
+		AIAI00050000000000000001 /* AIHookInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIHookInstaller.swift; sourceTree = "<group>"; };
+		AIAI00070000000000000001 /* AISessionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AISessionState.swift; sourceTree = "<group>"; };
+		AIAI00090000000000000001 /* AIHookEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIHookEvent.swift; sourceTree = "<group>"; };
+		AIAI000B0000000000000001 /* TmuxController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TmuxController.swift; sourceTree = "<group>"; };
+		AIAI000D0000000000000001 /* TmuxTargetFinder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TmuxTargetFinder.swift; sourceTree = "<group>"; };
+		AIAI000F0000000000000001 /* ToolApprovalHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolApprovalHandler.swift; sourceTree = "<group>"; };
+		AIAI00110000000000000001 /* AILiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AILiveActivity.swift; sourceTree = "<group>"; };
+		AIAI00130000000000000001 /* AIExpandedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIExpandedView.swift; sourceTree = "<group>"; };
+		AIAI00150000000000000001 /* AgentIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIconView.swift; sourceTree = "<group>"; };
+		AIAI00170000000000000001 /* AIStatusAnimationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIStatusAnimationView.swift; sourceTree = "<group>"; };
+		AIAI00190000000000000001 /* CompactCapsuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactCapsuleView.swift; sourceTree = "<group>"; };
+		AIAI001B0000000000000001 /* AISettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AISettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -561,6 +589,7 @@
 		14CEF4142C5CAED300855D72 /* boringNotch */ = {
 			isa = PBXGroup;
 			children = (
+				AIGRP000000000000000001 /* AI */,
 				11F748672EC9AC9600F841DB /* XPCHelperClient */,
 				116398942DF5D6B40052E6AF /* Providers */,
 				14288DE22C6E016F00B9F80C /* observers */,
@@ -755,6 +784,51 @@
 				B1C4489A2C97376A001F0858 /* TipStore.swift */,
 			);
 			path = Tips;
+			sourceTree = "<group>";
+		};
+		AIGRP000000000000000001 /* AI */ = {
+			isa = PBXGroup;
+			children = (
+				AIAI00010000000000000001 /* AIManager.swift */,
+				AIAI00030000000000000001 /* AIHookServer.swift */,
+				AIAI00050000000000000001 /* AIHookInstaller.swift */,
+				AIGRP000000000000000002 /* Models */,
+				AIGRP000000000000000003 /* Tmux */,
+				AIGRP000000000000000004 /* Views */,
+			);
+			path = AI;
+			sourceTree = "<group>";
+		};
+		AIGRP000000000000000002 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				AIAI00070000000000000001 /* AISessionState.swift */,
+				AIAI00090000000000000001 /* AIHookEvent.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		AIGRP000000000000000003 /* Tmux */ = {
+			isa = PBXGroup;
+			children = (
+				AIAI000B0000000000000001 /* TmuxController.swift */,
+				AIAI000D0000000000000001 /* TmuxTargetFinder.swift */,
+				AIAI000F0000000000000001 /* ToolApprovalHandler.swift */,
+			);
+			path = Tmux;
+			sourceTree = "<group>";
+		};
+		AIGRP000000000000000004 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				AIAI00110000000000000001 /* AILiveActivity.swift */,
+				AIAI00130000000000000001 /* AIExpandedView.swift */,
+				AIAI00150000000000000001 /* AgentIconView.swift */,
+				AIAI00170000000000000001 /* AIStatusAnimationView.swift */,
+				AIAI00190000000000000001 /* CompactCapsuleView.swift */,
+				AIAI001B0000000000000001 /* AISettingsView.swift */,
+			);
+			path = Views;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -1020,6 +1094,20 @@
 				1100290C2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift in Sources */,
 				11CFC6632E09918400748C80 /* MusicControllerSelectionView.swift in Sources */,
 				B1F0A0022E60000100000001 /* BrightnessManager.swift in Sources */,
+				AIAI00020000000000000001 /* AIManager.swift in Sources */,
+				AIAI00040000000000000001 /* AIHookServer.swift in Sources */,
+				AIAI00060000000000000001 /* AIHookInstaller.swift in Sources */,
+				AIAI00080000000000000001 /* AISessionState.swift in Sources */,
+				AIAI000A00000000000001 /* AIHookEvent.swift in Sources */,
+				AIAI000C0000000000000001 /* TmuxController.swift in Sources */,
+				AIAI000E0000000000000001 /* TmuxTargetFinder.swift in Sources */,
+				AIAI0010000000000000001 /* ToolApprovalHandler.swift in Sources */,
+				AIAI00120000000000000001 /* AILiveActivity.swift in Sources */,
+				AIAI00140000000000000001 /* AIExpandedView.swift in Sources */,
+				AIAI00160000000000000001 /* AgentIconView.swift in Sources */,
+				AIAI00180000000000000001 /* AIStatusAnimationView.swift in Sources */,
+				AIAI001A00000000000001 /* CompactCapsuleView.swift in Sources */,
+				AIAI001C0000000000000001 /* AISettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
