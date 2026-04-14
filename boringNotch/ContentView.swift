@@ -338,11 +338,18 @@ struct ContentView: View {
                           // Settings peek - shown below notch like music
                           else if coordinator.sneakPeek.type == .settings {
                               if vm.notchState == .closed {
-                                  HStack(alignment: .center, spacing: 8) {
-                                      Image(systemName: "gear")
-                                      Text(coordinator.sneakPeek.message)
-                                      Text(coordinator.sneakPeek.icon.contains("checkmark") ? "✓" : "✗")
-                                          .foregroundStyle(coordinator.sneakPeek.icon.contains("checkmark") ? .green : .red)
+                                  let success = coordinator.sneakPeek.icon.contains("checkmark")
+                                  HStack(spacing: 12) {
+                                      HStack(spacing: 8) {
+                                          Image(systemName: "gear")
+                                          Text(coordinator.sneakPeek.message)
+                                              .lineLimit(1)
+                                      }
+                                      HStack(spacing: 4) {
+                                          Text(success ? "Success" : "Fail")
+                                          Image(systemName: coordinator.sneakPeek.icon)
+                                      }
+                                      .foregroundStyle(success ? .green : .red)
                                   }
                                   .foregroundStyle(.gray)
                                   .padding(.bottom, 10)
@@ -351,7 +358,7 @@ struct ContentView: View {
                       }
                   }
               }
-              .conditionalModifier((coordinator.sneakPeek.show && (coordinator.sneakPeek.type == .music) && vm.notchState == .closed && !vm.hideOnClosed && Defaults[.sneakPeekStyles] == .standard) || (coordinator.sneakPeek.show && (coordinator.sneakPeek.type != .music) && (vm.notchState == .closed))) { view in
+              .conditionalModifier((coordinator.sneakPeek.show && (coordinator.sneakPeek.type == .music) && vm.notchState == .closed && !vm.hideOnClosed && Defaults[.sneakPeekStyles] == .standard) || (coordinator.sneakPeek.show && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .settings) && (vm.notchState == .closed))) { view in
                   view
                       .fixedSize()
               }
