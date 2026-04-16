@@ -182,6 +182,62 @@ struct ReadyForInputIndicatorIcon: View {
     }
 }
 
+// MARK: - Sleep/Idle Icon (zZZ animation)
+struct SleepIcon: View {
+    let size: CGFloat
+    let color: Color
+
+    @State private var zOffset: CGFloat = 0
+    @State private var opacity: Double = 0.4
+
+    init(size: CGFloat = 14, color: Color = .white.opacity(0.5)) {
+        self.size = size
+        self.color = color
+    }
+
+    private let timer = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        Canvas { context, canvasSize in
+            let scale = size / 30.0
+
+            // Draw "z" letters floating up
+            let zPositions: [(CGFloat, CGFloat, CGFloat)] = [
+                (8, 20, 0.8),   // Bottom z - larger
+                (14, 12, 0.6),  // Middle z - medium
+                (20, 6, 0.4),   // Top z - smallest
+            ]
+
+            for (x, y, alpha) in zPositions {
+                // Simple pixel-art "z" shape
+                let dots: [(CGFloat, CGFloat)] = [
+                    (x - 3, y), (x, y), (x + 3, y),       // Top bar
+                    (x, y - 3),                            // Diagonal
+                    (x - 3, y - 6), (x, y - 6), (x + 3, y - 6), // Bottom bar
+                ]
+
+                for (dx, dy) in dots {
+                    let rect = CGRect(
+                        x: dx * scale - 1.5 * scale,
+                        y: dy * scale - 1.5 * scale,
+                        width: 3 * scale,
+                        height: 3 * scale
+                    )
+                    context.fill(Path(rect), with: .color(color.opacity(alpha * opacity)))
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .offset(y: zOffset)
+        .onReceive(timer) { _ in
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                zOffset = -2
+                opacity = 0.7
+            }
+        }
+    }
+}
+
 // MARK: - Agent Icon View
 struct AgentIconView: View {
     let size: CGFloat
@@ -194,5 +250,53 @@ struct AgentIconView: View {
 
     var body: some View {
         ClaudeCrabIcon(size: size, animateLegs: animateLegs)
+    }
+}
+
+// MARK: - Approval Badge (for multiple pending approvals)
+struct ApprovalBadge: View {
+    let count: Int
+    let size: CGFloat
+
+    init(count: Int, size: CGFloat = 14) {
+        self.count = count
+        self.size = size
+    }
+
+    var body: some View {
+        ZStack {
+            PermissionIndicatorIcon(size: size, color: claudeOrange)
+
+            // Count overlay
+            Text("\(count)")
+                .font(.system(size: size * 0.5, weight: .bold))
+                .foregroundColor(.white)
+                .offset(x: size * 0.2, y: -size * 0.2)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+// MARK: - Session Status Icon (unified icon for session phase)
+struct SessionStatusIcon: View {
+    let phase: AISessionPhase
+    let size: CGFloat
+
+    init(phase: AISessionPhase, size: CGFloat = 16) {
+        self.phase = phase
+        self.size = size
+    }
+
+    var body: some View {
+        switch phase {
+        case .processing, .runningTool, .compacting:
+            AgentIconView(size: size, animateLegs: true)
+        case .waitingForApproval:
+            PermissionIndicatorIcon(size: size, color: claudeOrange)
+        case .waitingForInput:
+            ReadyForInputIndicatorIcon(size: size, color: .green)
+        case .idle, .ended:
+            SleepIcon(size: size, color: .white.opacity(0.5))
+        }
     }
 }

@@ -9,8 +9,10 @@ enum AISessionPhase: String, Codable {
     case compacting
     case ended
 
+    /// Only waiting_for_approval truly needs user attention.
+    /// waiting_for_input means session is ready for new prompt (normal idle state).
     var needsAttention: Bool {
-        self == .waitingForApproval || self == .waitingForInput
+        self == .waitingForApproval
     }
 
     var isActive: Bool {

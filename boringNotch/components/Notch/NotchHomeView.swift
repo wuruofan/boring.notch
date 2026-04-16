@@ -427,7 +427,7 @@ struct NotchHomeView: View {
     let albumArtNamespace: Namespace.ID
 
     var body: some View {
-        let showAI = aiManager.isActive && Defaults[.aiShowInNotch]
+        let showAI = !aiManager.sessions.isEmpty && Defaults[.aiShowInNotch]
         return Group {
             if !coordinator.firstLaunch {
                 mainContent(showAI: showAI)
@@ -470,8 +470,8 @@ struct NotchHomeView: View {
                         }
                     }
 
-                    // AI card - independent rounded rectangle with shadow
-                    AIStatusCardExpanded()
+                    // AI card - multi-session list
+                    SessionList()
                 }
                 .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .top)), removal: .opacity))
             } else {

@@ -306,9 +306,9 @@ struct AIHookInstaller {
                 "PreToolUse": "running_tool",
                 "PostToolUse": "processing",
                 "PermissionRequest": "waiting_for_approval",
-                "Stop": "waiting_for_input",
-                "SubagentStop": "waiting_for_input",
-                "SessionStart": "waiting_for_input",
+                "Stop": "idle",  # ESC interrupt or normal stop - show sleep animation
+                "SubagentStop": "idle",
+                "SessionStart": "idle",  # Startup - show sleep animation
                 "SessionEnd": "ended",
                 "PreCompact": "compacting",
             }
@@ -319,7 +319,7 @@ struct AIHookInstaller {
                 if notification_type == "permission_prompt":
                     return
                 elif notification_type == "idle_prompt":
-                    status = "waiting_for_input"
+                    status = "idle"  # ESC interrupted - show sleep animation
                 else:
                     status = "notification"
             else:

@@ -14,21 +14,26 @@ struct DualLiveActivity: View {
         max(0, vm.effectiveClosedNotchHeight - 16)  // Smaller than album art for visual balance
     }
 
-    /// Whether AI is currently processing/running (should animate legs)
-    private var isAIProcessing: Bool {
-        aiManager.currentPhase == .processing || aiManager.currentPhase == .runningTool || aiManager.currentPhase == .compacting
+    /// The session to display (highest priority)
+    private var displaySession: AISessionState? {
+        aiManager.highestPrioritySession
     }
 
-    /// Whether AI just completed (waiting for input = done)
-    private var isAICompleted: Bool {
-        aiManager.currentPhase == .waitingForInput
+    /// Badge count for multiple approvals pending
+    private var approvalBadgeCount: Int {
+        aiManager.approvalPendingCount
     }
 
     var body: some View {
         HStack(spacing: 6) {
-            // Left: AI icon (same size as album art)
-            AgentIconView(size: iconSize, animateLegs: isAIProcessing)
-                .frame(width: iconSize, height: iconSize)
+            // Left: AI icon - use highest priority session's status
+            if let session = displaySession {
+                SessionStatusIcon(phase: session.phase, size: iconSize)
+                    .frame(width: iconSize, height: iconSize)
+            } else {
+                SleepIcon(size: iconSize, color: .white.opacity(0.5))
+                    .frame(width: iconSize, height: iconSize)
+            }
 
             // Divider line (subtle separator)
             Rectangle()
@@ -76,13 +81,15 @@ struct DualLiveActivity: View {
                 .fill(.white.opacity(0.1))
                 .frame(width: 1, height: iconSize - 4)
 
-            // Right: AI status - checkmark for completed, spinner for processing
-            if isAICompleted {
-                // Green checkmark for completed state
-                ReadyForInputIndicatorIcon(size: iconSize, color: .green)
+            // Right: Status animation or approval badge
+            if approvalBadgeCount > 1 {
+                ApprovalBadge(count: approvalBadgeCount, size: iconSize)
+                    .frame(width: iconSize, height: iconSize)
+            } else if let session = displaySession {
+                AIStatusAnimationView(phase: session.phase, size: iconSize)
                     .frame(width: iconSize, height: iconSize)
             } else {
-                AIStatusAnimationView(phase: aiManager.currentPhase)
+                SleepIcon(size: iconSize, color: .white.opacity(0.5))
                     .frame(width: iconSize, height: iconSize)
             }
         }
@@ -92,7 +99,7 @@ struct DualLiveActivity: View {
 }
 
 /// AI-only Live Activity (no music playing)
-/// Layout: [🤖] Spacer [动画/对勾]
+/// Layout: [🤖] Spacer [动画]
 struct AIOnlyLiveActivity: View {
     @ObservedObject var aiManager = AIManager.shared
     @EnvironmentObject var vm: BoringViewModel
@@ -101,28 +108,40 @@ struct AIOnlyLiveActivity: View {
         max(0, vm.effectiveClosedNotchHeight - 16)  // Smaller than album art for visual balance
     }
 
-    private var isAIProcessing: Bool {
-        aiManager.currentPhase == .processing || aiManager.currentPhase == .runningTool || aiManager.currentPhase == .compacting
+    /// The session to display (highest priority)
+    private var displaySession: AISessionState? {
+        aiManager.highestPrioritySession
     }
 
-    private var isAICompleted: Bool {
-        aiManager.currentPhase == .waitingForInput
+    /// Badge count for multiple approvals pending
+    private var approvalBadgeCount: Int {
+        aiManager.approvalPendingCount
     }
 
     var body: some View {
         HStack(spacing: 0) {
-            AgentIconView(size: iconSize, animateLegs: isAIProcessing)
-                .frame(width: iconSize, height: iconSize)
+            // Left: AI icon - use highest priority session's status
+            if let session = displaySession {
+                SessionStatusIcon(phase: session.phase, size: iconSize)
+                    .frame(width: iconSize, height: iconSize)
+            } else {
+                SleepIcon(size: iconSize, color: .white.opacity(0.5))
+                    .frame(width: iconSize, height: iconSize)
+            }
 
             Rectangle()
                 .fill(.black)
                 .frame(width: vm.closedNotchSize.width)
 
-            if isAICompleted {
-                ReadyForInputIndicatorIcon(size: iconSize, color: .green)
+            // Right: Status animation or approval badge
+            if approvalBadgeCount > 1 {
+                ApprovalBadge(count: approvalBadgeCount, size: iconSize)
+                    .frame(width: iconSize, height: iconSize)
+            } else if let session = displaySession {
+                AIStatusAnimationView(phase: session.phase, size: iconSize)
                     .frame(width: iconSize, height: iconSize)
             } else {
-                AIStatusAnimationView(phase: aiManager.currentPhase)
+                SleepIcon(size: iconSize, color: .white.opacity(0.5))
                     .frame(width: iconSize, height: iconSize)
             }
         }

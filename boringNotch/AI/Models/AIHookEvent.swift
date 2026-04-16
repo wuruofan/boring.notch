@@ -24,11 +24,8 @@ struct AIHookEvent: Codable {
     }
 
     func toPhase() -> AISessionPhase {
-        // First check event type for termination events
-        if event == "Stop" || event == "SessionEnd" {
-            return .ended
-        }
-
+        // Respect the status field from hook script first
+        // Hook script determines the semantic meaning of each event
         switch status {
         case "processing":
             return .processing
@@ -42,7 +39,13 @@ struct AIHookEvent: Codable {
             return .compacting
         case "ended":
             return .ended
+        case "idle":
+            return .idle
         default:
+            // Fallback: only SessionEnd always means ended
+            if event == "SessionEnd" {
+                return .ended
+            }
             return .idle
         }
     }
