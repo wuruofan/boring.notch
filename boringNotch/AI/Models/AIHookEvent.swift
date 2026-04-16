@@ -24,6 +24,11 @@ struct AIHookEvent: Codable {
     }
 
     func toPhase() -> AISessionPhase {
+        // First check event type for termination events
+        if event == "Stop" || event == "SessionEnd" {
+            return .ended
+        }
+
         switch status {
         case "processing":
             return .processing

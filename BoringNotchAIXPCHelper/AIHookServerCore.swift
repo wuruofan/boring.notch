@@ -17,8 +17,17 @@ class AIHookServerCore {
     private var toolUseIdCache: [String: [String]] = [:]
     private let cacheLock = NSLock()
 
-    /// State file path for the main app to read
-    static let stateFilePath = "/tmp/boringnotch-ai-state.json"
+    /// State file path in sandbox container (main app can read this)
+    /// XPC Helper is unsandboxed and can write anywhere
+    static let stateFilePath: String = {
+        // Get real user home directory (not sandbox container)
+        if let pw = getpwuid(getuid()), let home = pw.pointee.pw_dir {
+            let homePath = String(cString: home)
+            return "\(homePath)/Library/Containers/theboringteam.boringnotch/Data/Library/Caches/boringnotch-ai-state.json"
+        }
+        // Fallback to /tmp if we can't determine container path
+        return "/tmp/boringnotch-ai-state.json"
+    }()
 
     struct PendingPermission {
         let sessionId: String
@@ -224,12 +233,7 @@ class AIHookServerCore {
             return
         }
 
-        // Write raw event data to state file for main app to read
-        if let str = String(data: allData, encoding: .utf8) {
-            try? str.write(toFile: Self.stateFilePath, atomically: true, encoding: .utf8)
-        }
-
-        // Parse event for internal logic
+        // Parse event for internal logic (needed for logging before write)
         guard let json = try? JSONSerialization.jsonObject(with: allData) as? [String: Any] else {
             NSLog("AIHookServerCore: Failed to parse event JSON")
             close(clientSocket)
@@ -239,6 +243,30 @@ class AIHookServerCore {
         let event = json["event"] as? String ?? ""
         let sessionId = json["session_id"] as? String ?? ""
         let status = json["status"] as? String ?? ""
+
+        // Write raw event data to state file for main app to read
+        if let str = String(data: allData, encoding: .utf8) {
+            // Diagnostic: log before/after inode to verify atomic write behavior
+            let beforeInode: Int? = {
+                if let attrs = try? FileManager.default.attributesOfItem(atPath: Self.stateFilePath),
+                   let inode = attrs[.systemFileNumber] as? Int {
+                    return inode
+                }
+                return nil
+            }()
+
+            try? str.write(toFile: Self.stateFilePath, atomically: false, encoding: .utf8)
+
+            let afterInode: Int? = {
+                if let attrs = try? FileManager.default.attributesOfItem(atPath: Self.stateFilePath),
+                   let inode = attrs[.systemFileNumber] as? Int {
+                    return inode
+                }
+                return nil
+            }()
+
+            NSLog("AIHookServerCore: Wrote event \(event) inode: before=\(beforeInode ?? -1) after=\(afterInode ?? -1) changed=\(beforeInode != afterInode)")
+        }
 
         // Cache tool_use_id from PreToolUse
         if event == "PreToolUse" {

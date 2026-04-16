@@ -423,12 +423,14 @@ struct NotchHomeView: View {
     @ObservedObject var webcamManager = WebcamManager.shared
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var coordinator = BoringViewCoordinator.shared
+    @ObservedObject var aiManager = AIManager.shared
     let albumArtNamespace: Namespace.ID
 
     var body: some View {
-        Group {
+        let showAI = aiManager.isActive && Defaults[.aiShowInNotch]
+        return Group {
             if !coordinator.firstLaunch {
-                mainContent
+                mainContent(showAI: showAI)
             }
         }
         // simplified: use a straightforward opacity transition
@@ -439,30 +441,225 @@ struct NotchHomeView: View {
         Defaults[.showMirror] && webcamManager.cameraAvailable && vm.isCameraExpanded
     }
 
-    private var mainContent: some View {
-        HStack(alignment: .top, spacing: (shouldShowCamera && Defaults[.showCalendar]) ? 10 : 15) {
-            MusicPlayerView(albumArtNamespace: albumArtNamespace)
+    private var shouldShowAI: Bool {
+        aiManager.isActive && Defaults[.aiShowInNotch]
+    }
 
-            if Defaults[.showCalendar] {
-                CalendarView()
-                    .frame(width: shouldShowCamera ? 170 : 215)
-                    .onHover { isHovering in
-                        vm.isHoveringCalendar = isHovering
+    private func mainContent(showAI: Bool) -> some View {
+        Group {
+            if showAI {
+                VStack(spacing: 12) {
+                    // Music card
+                    HStack(alignment: .top, spacing: 15) {
+                        MusicPlayerView(albumArtNamespace: albumArtNamespace)
+
+                        if Defaults[.showCalendar] {
+                            CalendarView()
+                                .frame(width: shouldShowCamera ? 170 : 215)
+                                .onHover { isHovering in
+                                    vm.isHoveringCalendar = isHovering
+                                }
+                                .environmentObject(vm)
+                        }
+
+                        if shouldShowCamera {
+                            CameraPreviewView(webcamManager: webcamManager)
+                                .scaledToFit()
+                                .opacity(vm.notchState == .closed ? 0 : 1)
+                                .blur(radius: vm.notchState == .closed ? 20 : 0)
+                        }
                     }
-                    .environmentObject(vm)
-                    .transition(.opacity)
-            }
 
-            if shouldShowCamera {
-                CameraPreviewView(webcamManager: webcamManager)
-                    .scaledToFit()
-                    .opacity(vm.notchState == .closed ? 0 : 1)
-                    .blur(radius: vm.notchState == .closed ? 20 : 0)
-                    .animation(.interactiveSpring(response: 0.32, dampingFraction: 0.76, blendDuration: 0), value: shouldShowCamera)
+                    // AI card - independent rounded rectangle with shadow
+                    AIStatusCardExpanded()
+                }
+                .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .top)), removal: .opacity))
+            } else {
+                // Original horizontal layout (no AI)
+                HStack(alignment: .top, spacing: (shouldShowCamera && Defaults[.showCalendar]) ? 10 : 15) {
+                    MusicPlayerView(albumArtNamespace: albumArtNamespace)
+
+                    if Defaults[.showCalendar] {
+                        CalendarView()
+                            .frame(width: shouldShowCamera ? 170 : 215)
+                            .onHover { isHovering in
+                                vm.isHoveringCalendar = isHovering
+                            }
+                            .environmentObject(vm)
+                            .transition(.opacity)
+                    }
+
+                    if shouldShowCamera {
+                        CameraPreviewView(webcamManager: webcamManager)
+                            .scaledToFit()
+                            .opacity(vm.notchState == .closed ? 0 : 1)
+                            .blur(radius: vm.notchState == .closed ? 20 : 0)
+                            .animation(.interactiveSpring(response: 0.32, dampingFraction: 0.76, blendDuration: 0), value: shouldShowCamera)
+                    }
+                }
+                .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .top)), removal: .opacity))
             }
         }
-        .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .top)), removal: .opacity))
         .blur(radius: vm.notchState == .closed ? 30 : 0)
+    }
+}
+
+// AI Status Card Expanded - matches claude-island InstanceRow style
+struct AIStatusCardExpanded: View {
+    @ObservedObject var aiManager = AIManager.shared
+    @State private var isHovered = false
+
+    private var isProcessing: Bool {
+        aiManager.currentPhase == .processing || aiManager.currentPhase == .runningTool || aiManager.currentPhase == .compacting
+    }
+
+    private var isWaitingForApproval: Bool {
+        aiManager.currentPhase == .waitingForApproval
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            // State indicator on left (spinner or status icon)
+            stateIndicator
+                .frame(width: 14)
+
+            // Text content
+            VStack(alignment: .leading, spacing: 2) {
+                Text(sessionTitle)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+
+                // Show tool when waiting for approval or processing
+                if let session = aiManager.currentSession {
+                    if let tool = session.currentTool {
+                        HStack(spacing: 4) {
+                            Text(formatToolName(tool))
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundColor(isWaitingForApproval ? claudeOrange.opacity(0.9) : .white.opacity(0.5))
+                            if let cwd = session.cwd {
+                                Text(cwd)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.white.opacity(0.4))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                        }
+                    } else if let cwd = session.cwd {
+                        Text(cwd)
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.4))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            // Approval buttons when waiting
+            if isWaitingForApproval {
+                InlineApprovalButtons()
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
+        }
+        .padding(.leading, 8)
+        .padding(.trailing, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isHovered ? Color.white.opacity(0.06) : Color.clear)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .onHover { isHovered = $0 }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isWaitingForApproval)
+    }
+
+    @ViewBuilder
+    private var stateIndicator: some View {
+        switch aiManager.currentPhase {
+        case .processing, .runningTool, .compacting:
+            ProcessingSpinner()
+        case .waitingForApproval:
+            ProcessingSpinner()  // Amber color spinner
+        case .waitingForInput:
+            Circle()
+                .fill(Color.green)
+                .frame(width: 6, height: 6)
+        case .idle, .ended:
+            Circle()
+                .fill(Color.white.opacity(0.2))
+                .frame(width: 6, height: 6)
+        }
+    }
+
+    private var sessionTitle: String {
+        if let session = aiManager.currentSession, let cwd = session.cwd {
+            // Extract project name from cwd
+            let parts = cwd.split(separator: "/")
+            return parts.last.map(String.init) ?? "Claude Code"
+        }
+        return "Claude Code"
+    }
+
+    private func formatToolName(_ tool: String) -> String {
+        // Format MCP tool names (e.g., "mcp__server__tool" → "server: tool")
+        if tool.hasPrefix("mcp__") {
+            let parts = tool.dropFirst(5).split(separator: "__")
+            if parts.count >= 2 {
+                return "\(parts[0]): \(parts[1])"
+            }
+        }
+        return tool
+    }
+}
+
+// Inline Approval Buttons - matches claude-island style
+struct InlineApprovalButtons: View {
+    @ObservedObject var aiManager = AIManager.shared
+    @State private var showDenyButton = false
+    @State private var showAllowButton = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button {
+                Task { await aiManager.reject() }
+            } label: {
+                Text("Deny")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .opacity(showDenyButton ? 1 : 0)
+            .scaleEffect(showDenyButton ? 1 : 0.8)
+
+            Button {
+                Task { await aiManager.approveOnce() }
+            } label: {
+                Text("Allow")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.9))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .opacity(showAllowButton ? 1 : 0)
+            .scaleEffect(showAllowButton ? 1 : 0.8)
+        }
+        .onAppear {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7).delay(0.05)) {
+                showDenyButton = true
+            }
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7).delay(0.1)) {
+                showAllowButton = true
+            }
+        }
     }
 }
 

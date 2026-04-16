@@ -40,6 +40,25 @@ class AIManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var persistentPeekTimeoutTask: Task<Void, Never>?
 
+    private static let logPath: String = {
+        let cachesPath = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.path ?? ""
+        return cachesPath + "/ai-debug.log"
+    }()
+
+    private func appendAILog(_ msg: String) {
+        if let data = msg.data(using: .utf8) {
+            if FileManager.default.fileExists(atPath: Self.logPath) {
+                if let fh = FileHandle(forWritingAtPath: Self.logPath) {
+                    fh.seekToEndOfFile()
+                    fh.write(data)
+                    fh.closeFile()
+                }
+            } else {
+                try? msg.write(toFile: Self.logPath, atomically: true, encoding: .utf8)
+            }
+        }
+    }
+
     private init() {
         hookServer = AIHookServer()
         hookServer?.onEvent = { [weak self] event in
@@ -57,11 +76,17 @@ class AIManager: ObservableObject {
     // MARK: - Lifecycle
 
     func start() {
-        guard Defaults[.aiEnabled] else { return }
+        appendAILog("AIManager.start() called, aiEnabled=\(Defaults[.aiEnabled])\n")
+        guard Defaults[.aiEnabled] else {
+            appendAILog("AIManager: Skipping start - AI disabled\n")
+            return
+        }
         hookServer?.start()
+        appendAILog("AIManager: hookServer started\n")
         Task {
-            isConnected = await AIXPCClient.shared.startServer()
-            NSLog("AIManager: Started (XPC server: \(isConnected))")
+            let success = await AIXPCClient.shared.startServer()
+            isConnected = success
+            appendAILog("AIManager: XPC startServer result = \(success)\n")
         }
     }
 
@@ -75,7 +100,6 @@ class AIManager: ObservableObject {
         isActive = false
         isConnected = false
         persistentPeekTimeoutTask?.cancel()
-        NSLog("AIManager: Stopped")
     }
 
     // MARK: - Event Handling
@@ -84,9 +108,58 @@ class AIManager: ObservableObject {
         let sessionId = event.sessionId
         let phase = event.toPhase()
 
+        // Append log for event handling
+        appendAILog("handleHookEvent: event=\(event.event) phase=\(phase.rawValue) sessionId=\(sessionId.isEmpty ? "empty" : sessionId.prefix(8))\n")
+
+        // Handle Stop/SessionEnd events first - these are termination signals
+        if phase == .ended || event.event == "Stop" || event.event == "SessionEnd" {
+            if sessionId.isEmpty {
+                // Global cleanup for empty sessionId
+                appendAILog("handleHookEvent: Global cleanup - clearing all sessions\n")
+                sessions.removeAll()
+                activeSessionId = nil
+                isActive = false
+                updateCoordinator()
+                return
+            } else {
+                // Remove specific session, even if not in dictionary
+                appendAILog("handleHookEvent: Session ended, removing \(sessionId.prefix(8))\n")
+                sessions.removeValue(forKey: sessionId)
+                if activeSessionId == sessionId {
+                    activeSessionId = nil
+                    isActive = false
+                    // Check if other sessions are still active
+                    for remaining in sessions.values {
+                        if remaining.phase.isActive || remaining.phase.needsAttention {
+                            activeSessionId = remaining.id
+                            isActive = true
+                            appendAILog("handleHookEvent: Found other active session \(remaining.id.prefix(8))\n")
+                            break
+                        }
+                    }
+                }
+                updateCoordinator()
+                return
+            }
+        }
+
+        // Use sessionId if available, otherwise use toolUseId or pid as fallback identifier
+        let effectiveSessionId: String
+        if !sessionId.isEmpty {
+            effectiveSessionId = sessionId
+        } else if let toolUseId = event.toolUseId, !toolUseId.isEmpty {
+            effectiveSessionId = "tool-\(toolUseId)"
+        } else if let pid = event.pid {
+            effectiveSessionId = "pid-\(pid)"
+        } else {
+            // No valid identifier, skip this event
+            appendAILog("handleHookEvent: Skipping event with no valid identifier\n")
+            return
+        }
+
         // Update or create session
-        var session = sessions[sessionId] ?? AISessionState(
-            id: sessionId,
+        var session = sessions[effectiveSessionId] ?? AISessionState(
+            id: effectiveSessionId,
             phase: .idle,
             lastUpdated: Date()
         )
@@ -107,7 +180,7 @@ class AIManager: ObservableObject {
                 id: toolUseId,
                 tool: event.tool ?? "",
                 toolInput: event.toolInput,
-                sessionId: sessionId,
+                sessionId: effectiveSessionId,
                 cwd: event.cwd,
                 pid: event.pid,
                 tty: event.tty
@@ -116,26 +189,26 @@ class AIManager: ObservableObject {
             session.permissionRequest = nil
         }
 
-        // Remove ended sessions
-        if phase == .ended {
-            sessions.removeValue(forKey: sessionId)
-            if activeSessionId == sessionId {
-                activeSessionId = nil
-                isActive = false
-            }
-            updateCoordinator()
-            return
-        }
-
-        sessions[sessionId] = session
+        sessions[effectiveSessionId] = session
 
         // Update active session
         if phase.isActive || phase.needsAttention {
-            activeSessionId = sessionId
+            activeSessionId = effectiveSessionId
             isActive = true
-        } else if activeSessionId == sessionId && phase == .idle {
+            appendAILog("handleHookEvent: Set isActive=true, phase=\(phase.rawValue)\n")
+        } else if activeSessionId == effectiveSessionId && (phase == .idle || phase == .ended) {
             activeSessionId = nil
             isActive = false
+            appendAILog("handleHookEvent: Set isActive=false for session \(effectiveSessionId.prefix(8))\n")
+            // Check if other sessions are still active
+            for remaining in sessions.values {
+                if remaining.phase.isActive || remaining.phase.needsAttention {
+                    activeSessionId = remaining.id
+                    isActive = true
+                    appendAILog("handleHookEvent: Found other active session \(remaining.id.prefix(8))\n")
+                    break
+                }
+            }
         }
 
         updateCoordinator()
@@ -152,8 +225,12 @@ class AIManager: ObservableObject {
 
     private func updateCoordinator() {
         let coordinator = BoringViewCoordinator.shared
+        let show = isActive && Defaults[.aiShowInNotch]
+        appendAILog("updateCoordinator: isActive=\(isActive), aiShowInNotch=\(Defaults[.aiShowInNotch]), show=\(show)\n")
+        appendAILog("updateCoordinator: sneakPeek.show=\(coordinator.sneakPeek.show), isAI=\(coordinator.sneakPeek.type == .ai)\n")
 
-        if isActive && Defaults[.aiShowInNotch] {
+        if show {
+            appendAILog("updateCoordinator: Calling toggleSneakPeek(status=true, type=.ai)\n")
             coordinator.toggleSneakPeek(
                 status: true,
                 type: .ai,
@@ -165,7 +242,7 @@ class AIManager: ObservableObject {
             persistentPeekTimeoutTask?.cancel()
             persistentPeekTimeoutTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(600))
-                guard let self = self, !Task.isCancelled else { return }
+                guard let self, !Task.isCancelled else { return }
                 await MainActor.run {
                     self.persistentPeekTimeoutTask = nil
                     coordinator.sneakPeek.persistent = false
@@ -173,6 +250,7 @@ class AIManager: ObservableObject {
                 }
             }
         } else {
+            appendAILog("updateCoordinator: toggleSneakPeek(status=false) - conditions not met\n")
             persistentPeekTimeoutTask?.cancel()
             coordinator.sneakPeek.persistent = false
             coordinator.toggleSneakPeek(status: false, type: .ai)

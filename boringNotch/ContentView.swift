@@ -23,6 +23,7 @@ struct ContentView: View {
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var brightnessManager = BrightnessManager.shared
     @ObservedObject var volumeManager = VolumeManager.shared
+    @ObservedObject var aiManager = AIManager.shared
     @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
     @State private var anyDropDebounceTask: Task<Void, Never>?
@@ -61,13 +62,24 @@ struct ContentView: View {
     private var computedChinWidth: CGFloat {
         var chinWidth: CGFloat = vm.closedNotchSize.width
 
+        // Check both AI and Music states
+        let showAI = aiManager.isActive && Defaults[.aiShowInNotch]
+        let showMusic = (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled
+
         if coordinator.expandingView.type == .battery && coordinator.expandingView.show
             && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
         {
             chinWidth = 640
+        } else if vm.notchState == .closed && showAI && showMusic && !vm.hideOnClosed {
+            // Both active: extra width for AI elements (icon + divider + animation + divider)
+            let baseExtra = 2 * max(0, vm.effectiveClosedNotchHeight - 12) + 20
+            let aiExtra: CGFloat = 2 * max(0, vm.effectiveClosedNotchHeight - 12) + 2 + 4  // 2 icons + 2 dividers + spacing
+            chinWidth += baseExtra + aiExtra
+        } else if vm.notchState == .closed && showAI && !vm.hideOnClosed {
+            // AI only: same width as music
+            chinWidth += (2 * max(0, vm.effectiveClosedNotchHeight - 12) + 20)
         } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music)
-            && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle)
-            && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed
+            && vm.notchState == .closed && showMusic && !vm.hideOnClosed
         {
             chinWidth += (2 * max(0, vm.effectiveClosedNotchHeight - 12) + 20)
         } else if !coordinator.expandingView.show && vm.notchState == .closed
@@ -203,7 +215,7 @@ struct ContentView: View {
             }
         }
         .padding(.bottom, 8)
-        .frame(maxWidth: windowSize.width, maxHeight: windowSize.height, alignment: .top)
+        .frame(maxWidth: windowSize.width, maxHeight: vm.notchState == .open ? vm.notchSize.height + shadowPadding : windowSize.height, alignment: .top)
         .compositingGroup()
         .scaleEffect(
             x: gestureScale,
@@ -257,7 +269,20 @@ struct ContentView: View {
                     .padding(.top, 40)
                     Spacer()
                 } else {
-                    if coordinator.expandingView.type == .battery && coordinator.expandingView.show
+                    // Determine which Live Activity to show
+                    // Priority: AI+Music combined > Music only > AI only > Face
+                    let showAI = vm.notchState == .closed && aiManager.isActive && Defaults[.aiShowInNotch]
+                    let showMusic = (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed
+
+                    if showAI && showMusic {
+                        // Both active: combined layout [🤖]│[封面] 刘海 [波形]│[动画]
+                        DualLiveActivity()
+                            .frame(alignment: .center)
+                    } else if showAI {
+                        // AI only: [🤖] 刘海 [动画]
+                        AIOnlyLiveActivity()
+                            .frame(alignment: .center)
+                    } else if coordinator.expandingView.type == .battery && coordinator.expandingView.show
                         && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
                     {
                         HStack(spacing: 0) {
@@ -284,10 +309,7 @@ struct ContentView: View {
                             .frame(width: 76, alignment: .trailing)
                         }
                         .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
-                      } else if coordinator.sneakPeek.show && coordinator.sneakPeek.type == .ai && vm.notchState == .closed && AIManager.shared.isActive && Defaults[.aiShowInNotch] {
-                          AILiveActivity()
-                              .frame(alignment: .center)
-                      } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
+                      } else if showMusic {
                           MusicLiveActivity()
                               .frame(alignment: .center)
                       } else if !coordinator.expandingView.show && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed  {
@@ -318,9 +340,14 @@ struct ContentView: View {
                                       }
                                   }
                               )
-                              .padding(.bottom, 10)
-                              .padding(.leading, 4)
-                              .padding(.trailing, 8)
+                              .padding(.vertical, 8)
+                              .padding(.horizontal, 12)
+                              .background(
+                                  RoundedRectangle(cornerRadius: cornerRadiusInsets.closed.bottom)
+                                      .fill(.black)
+                              )
+                              .padding(.bottom, 8)
+                              .padding(.horizontal, 4)
                           }
                           // Old sneak peek music
                           else if coordinator.sneakPeek.type == .music {
@@ -526,6 +553,9 @@ struct ContentView: View {
     }
 
     private func doOpen() {
+        // First, notify AppDelegate to set window height BEFORE animation starts
+        NotificationCenter.default.post(name: Notification.Name.notchWillOpen, object: nil)
+        // Then start the animation
         withAnimation(animationSpring) {
             vm.open()
         }
@@ -547,18 +577,21 @@ struct ContentView: View {
             }
             
             guard vm.notchState == .closed,
-                  !coordinator.sneakPeek.show,
+                  (!coordinator.sneakPeek.show || coordinator.sneakPeek.type == .ai),
                   Defaults[.openNotchOnHover] else { return }
-            
+
+            // Keep currentView as .home (music view) - AI info will be shown in NotchHomeView
+            // Do NOT switch to .ai view on hover
+
             hoverTask = Task {
                 try? await Task.sleep(for: .seconds(Defaults[.minimumHoverDuration]))
                 guard !Task.isCancelled else { return }
-                
+
                 await MainActor.run {
                     guard self.vm.notchState == .closed,
                           self.isHovering,
-                          !self.coordinator.sneakPeek.show else { return }
-                    
+                          (!self.coordinator.sneakPeek.show || self.coordinator.sneakPeek.type == .ai) else { return }
+
                     self.doOpen()
                 }
             }

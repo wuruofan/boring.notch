@@ -55,15 +55,21 @@ final class AIXPCClient {
     // MARK: - Server Management
 
     nonisolated func startServer() async -> Bool {
+        NSLog("AIXPCClient.startServer() called")
         do {
-            let service = await MainActor.run { ensureRemoteService() }
+            let service = await MainActor.run {
+                NSLog("AIXPCClient: Creating NSXPCConnection for \(serviceName)")
+                return ensureRemoteService()
+            }
+            NSLog("AIXPCClient: Connection created, calling remote startServer()")
             return try await service.withContinuation { service, continuation in
                 service.startServer { success in
+                    NSLog("AIXPCClient: Remote startServer returned \(success)")
                     continuation.resume(returning: success)
                 }
             }
         } catch {
-            NSLog("AIXPCClient: Failed to start server: \(error)")
+            NSLog("AIXPCClient: startServer failed with error: \(error)")
             return false
         }
     }

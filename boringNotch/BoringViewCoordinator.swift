@@ -214,23 +214,23 @@ class BoringViewCoordinator: ObservableObject {
         icon: String = "", message: String = "", persistent: Bool = false
     ) {
         sneakPeekDuration = duration
-        if type != .music && type != .settings {
+        // AI status and music/settings should always show, regardless of hudReplacement
+        if type != .music && type != .settings && type != .ai {
             if !Defaults[.hudReplacement] {
                 return
             }
         }
 
-        DispatchQueue.main.async {
-            withAnimation(.smooth) {
-                self.sneakPeek = .init(
-                    show: status,
-                    type: type,
-                    value: value,
-                    icon: icon,
-                    message: message,
-                    persistent: persistent
-                )
-            }
+        // 直接设置
+        withAnimation(.smooth) {
+            self.sneakPeek = .init(
+                show: status,
+                type: type,
+                value: value,
+                icon: icon,
+                message: message,
+                persistent: persistent
+            )
         }
 
         if type == .mic {
@@ -244,6 +244,8 @@ class BoringViewCoordinator: ObservableObject {
     // Helper function to manage sneakPeek timer using Swift Concurrency
     private func scheduleSneakPeekHide(after duration: TimeInterval) {
         if sneakPeek.persistent { return }
+        // Skip scheduling for infinite or invalid durations (e.g., AI persistent peek)
+        if duration == .infinity || duration <= 0 || duration > 86400 { return }
         sneakPeekTask?.cancel()
 
         sneakPeekTask = Task { [weak self] in

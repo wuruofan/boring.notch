@@ -12,6 +12,7 @@ import SwiftUI
 class BoringViewModel: NSObject, ObservableObject {
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @ObservedObject var detector = FullscreenMediaDetector.shared
+    @ObservedObject var aiManager = AIManager.shared
 
     let animationLibrary: BoringAnimations = .init()
     let animation: Animation?
@@ -65,7 +66,33 @@ class BoringViewModel: NSObject, ObservableObject {
             }
             .assign(to: \.anyDropZoneTargeting, on: self)
             .store(in: &cancellables)
-        
+
+        // Monitor AI state changes to update open notch height dynamically
+        aiManager.$isActive
+            .combineLatest(Defaults.publisher(.aiShowInNotch).map(\.newValue))
+            .removeDuplicates(by: { $0.0 == $1.0 && $0.1 == $1.1 })
+            .receive(on: RunLoop.main)
+            .sink { [weak self] isActive, showInNotch in
+                guard let self = self, self.notchState == .open else { return }
+                // Update notch size when AI state changes while open
+                withAnimation(.smooth) {
+                    self.notchSize = self.effectiveOpenNotchSize
+                }
+            }
+            .store(in: &cancellables)
+
+        // Monitor currentView changes to adjust height when switching tabs
+        coordinator.$currentView
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self = self, self.notchState == .open else { return }
+                // Notify AppDelegate to resize window synchronously for tab switching
+                NotificationCenter.default.post(name: Notification.Name.notchWillResize, object: nil)
+                self.notchSize = self.effectiveOpenNotchSize
+            }
+            .store(in: &cancellables)
+
         setupDetectorObserver()
     }
     
@@ -107,6 +134,17 @@ class BoringViewModel: NSObject, ObservableObject {
         let currentScreen = screenUUID.flatMap { NSScreen.screen(withUUID: $0) }
         let noNotchAndFullscreen = hideOnClosed && (currentScreen?.safeAreaInsets.top ?? 0 <= 0 || currentScreen == nil)
         return noNotchAndFullscreen ? 0 : closedNotchSize.height
+    }
+
+    /// Dynamic open notch size - expands when AI is active and showing home view
+    var effectiveOpenNotchSize: CGSize {
+        let baseHeight = openNotchSize.height
+        // Only add extra height when AI is active AND we're on home view (not shelf)
+        if coordinator.currentView == .home && aiManager.isActive && Defaults[.aiShowInNotch] {
+            // AI card height ~55 + spacing 12 = ~67 extra
+            return CGSize(width: openNotchSize.width, height: baseHeight + 67)
+        }
+        return openNotchSize
     }
 
     var chinHeight: CGFloat {
@@ -190,9 +228,12 @@ class BoringViewModel: NSObject, ObservableObject {
     }
 
     func open() {
-        self.notchSize = openNotchSize
+        // Notify AppDelegate to set window height immediately before animation
+        NotificationCenter.default.post(name: Notification.Name.notchWillOpen, object: nil)
+
+        self.notchSize = effectiveOpenNotchSize
         self.notchState = .open
-        
+
         // Force music information update when notch is opened
         MusicManager.shared.forceUpdate()
     }

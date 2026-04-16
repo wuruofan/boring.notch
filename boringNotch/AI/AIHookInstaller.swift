@@ -273,7 +273,7 @@ struct AIHookInstaller {
                     capture_output=True, text=True
                 )
                 tty = result.stdout.strip()
-                if tty and tty != "?":
+                if tty and tty != "??" and tty != "-":
                     return "/dev/" + tty if not tty.startswith("/") else tty
             except:
                 pass
@@ -291,7 +291,14 @@ struct AIHookInstaller {
             except:
                 input_data = {}
 
-            event_type = os.environ.get("CLAUDE_HOOK_EVENT_NAME", "Unknown")
+            # Get event type from stdin JSON first, fallback to env var
+            event_type = input_data.get("hook_event_name") or os.environ.get("CLAUDE_HOOK_EVENT_NAME", "Unknown")
+
+            # Get session_id from stdin JSON first, fallback to env var
+            session_id = input_data.get("session_id") or os.environ.get("CLAUDE_SESSION_ID", "")
+
+            # Get cwd from stdin JSON first, fallback to env var
+            cwd = input_data.get("cwd") or os.environ.get("CLAUDE_WORKING_DIRECTORY", "")
 
             # Map event to status
             status_map = {
@@ -319,8 +326,8 @@ struct AIHookInstaller {
                 status = status_map.get(event_type, "unknown")
 
             state = {
-                "session_id": os.environ.get("CLAUDE_SESSION_ID", ""),
-                "cwd": os.environ.get("CLAUDE_WORKING_DIRECTORY", ""),
+                "session_id": session_id,
+                "cwd": cwd,
                 "event": event_type,
                 "status": status,
                 "tool": input_data.get("tool_name"),

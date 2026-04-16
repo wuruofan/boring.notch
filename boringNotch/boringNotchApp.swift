@@ -68,6 +68,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowScreenDidChangeObserver: Any?
     private var dragDetectors: [String: DragDetector] = [:] // UUID -> DragDetector
     var aiManager = AIManager.shared
+    private var notchSizeCancellable: AnyCancellable?
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
@@ -234,7 +235,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func createBoringNotchWindow(for screen: NSScreen, with viewModel: BoringViewModel) -> NSWindow {
-        let rect = NSRect(x: 0, y: 0, width: windowSize.width, height: windowSize.height)
+        // Use closed notch height + shadow for initial window size (will expand on open)
+        let closedHeight = viewModel.closedNotchSize.height + shadowPadding
+        let rect = NSRect(x: 0, y: 0, width: windowSize.width, height: closedHeight)
         let styleMask: NSWindow.StyleMask = [.borderless, .nonactivatingPanel, .utilityWindow, .hudWindow]
         
         let window = BoringNotchSkyLightWindow(contentRect: rect, styleMask: styleMask, backing: .buffered, defer: false)
@@ -282,6 +285,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // DIAGNOSTIC: Write to multiple known locations to verify execution
+        let msg = "applicationDidFinishLaunching called, aiEnabled=\(Defaults[.aiEnabled])\n"
+        // Try container Caches (should work in sandbox)
+        let cachesPath = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.path ?? ""
+        try? msg.write(toFile: cachesPath + "/app-launch.log", atomically: true, encoding: .utf8)
+        // Also try direct path
+        try? msg.write(toFile: "/tmp/boringnotch-app-launch.log", atomically: true, encoding: .utf8)
 
         NotificationCenter.default.addObserver(
             self,
@@ -333,6 +343,47 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             Task { @MainActor in
                 self?.setupDragDetectors()
+            }
+        }
+
+        // Listen for notchWillOpen to immediately set window height before animation starts
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name.notchWillOpen, object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let self = self, let window = self.window else { return }
+            // Synchronously set window to target height before ContentView animation starts
+            let targetHeight = self.vm.effectiveOpenNotchSize.height + shadowPadding
+            let screenFrame = window.screen?.frame ?? NSScreen.main?.frame ?? .zero
+            let newFrame = NSRect(
+                x: screenFrame.origin.x + (screenFrame.width / 2) - windowSize.width / 2,
+                y: screenFrame.origin.y + screenFrame.height - targetHeight,
+                width: windowSize.width,
+                height: targetHeight
+            )
+            window.setFrame(newFrame, display: true, animate: false)
+        }
+
+        // Listen for notchWillResize for tab switching height changes
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name.notchWillResize, object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let self = self, let window = self.window else { return }
+            let targetHeight = self.vm.effectiveOpenNotchSize.height + shadowPadding
+            let screenFrame = window.screen?.frame ?? NSScreen.main?.frame ?? .zero
+            let currentFrame = window.frame
+            // Only adjust if height actually changes
+            if currentFrame.height != targetHeight {
+                let newFrame = NSRect(
+                    x: currentFrame.origin.x,
+                    y: screenFrame.origin.y + screenFrame.height - targetHeight,
+                    width: currentFrame.width,
+                    height: targetHeight
+                )
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.25
+                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    window.animator().setFrame(newFrame, display: true)
+                }
             }
         }
 
@@ -442,6 +493,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.showOnboardingWindow(step: .musicPermission)
             }
         }
+
+        // Monitor notchSize changes to dynamically adjust window height when AI is active
+        vm.$notchSize
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] newSize in
+                guard let self = self, self.vm.notchState == .open, let window = self.window else { return }
+                // Animate window resize when notch is open
+                let newHeight = newSize.height + shadowPadding
+                let currentFrame = window.frame
+                let newFrame = NSRect(
+                    x: currentFrame.origin.x,
+                    y: currentFrame.origin.y + currentFrame.height - newHeight,
+                    width: currentFrame.width,
+                    height: newHeight
+                )
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.3
+                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    window.animator().setFrame(newFrame, display: true)
+                }
+            }
+            .store(in: &vm.cancellables)
 
         previousScreens = NSScreen.screens
     }
@@ -611,6 +685,8 @@ extension Notification.Name {
     static let showOnAllDisplaysChanged = Notification.Name("showOnAllDisplaysChanged")
     static let automaticallySwitchDisplayChanged = Notification.Name("automaticallySwitchDisplayChanged")
     static let expandedDragDetectionChanged = Notification.Name("expandedDragDetectionChanged")
+    static let notchWillOpen = Notification.Name("notchWillOpen")
+    static let notchWillResize = Notification.Name("notchWillResize")
 }
 
 extension CGRect: @retroactive Hashable {
