@@ -112,9 +112,10 @@ Claude-Island 项目已实现多 session 管理，关键架构：
 
 Session 列表容器（参考 Claude-Island `ClaudeInstancesView`）：
 
-- `ScrollView` + `LazyVStack` 显示 session 列表
-- 超出显示容量时显示 "+N more sessions"
+- `ScrollView` + `LazyVStack` 显示 session 列表，支持滚动
+- 无数量限制，超出可见区域自动滚动
 - 带动画的插入/移除过渡
+- 固定可见区域高度（约 200px），内容动态增长
 
 #### ApprovalButtons.swift
 
@@ -164,14 +165,14 @@ var approvalPendingCount: Int
 
 ```swift
 // 展开态高度计算（Notch 打开时的高度）
-// 单 session: baseHeight + 55
-// 多 session: baseHeight + 55 + (N-1) * 63
-// 最多显示 3 个 session，超出显示 "+N more"
+// 使用 ScrollView 支持无限 session 滚动
+// 固定最大高度：baseHeight + 200（约 3 个 session 可见区域）
+// 内容超出时自动滚动
 
 // 边界约束：
 // - 最小高度：baseHeight + 55（至少显示一个 session）
-// - 最大高度：baseHeight + 181（3 sessions）
-// - N = min(sessions.count, 3)
+// - 最大高度：baseHeight + 200（可见区域）
+// - 内容超出可见区域时通过 ScrollView 滚动
 ```
 
 #### AILiveActivity.swift
