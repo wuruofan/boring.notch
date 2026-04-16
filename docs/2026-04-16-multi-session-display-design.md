@@ -106,7 +106,7 @@ Claude-Island 项目已实现多 session 管理，关键架构：
 - 状态图标（蟹=processing，睡=idle，问号=waitingForApproval）
 - cwd 项目名（简化显示，取最后一个路径组件）
 - 当前工具名（格式化显示）
-- MiniApprovalButtons（等待审批时显示）
+- ApprovalButtons（等待审批时显示）
 
 #### SessionList.swift
 
@@ -233,10 +233,11 @@ ESC 打断 Claude 会话时：
 "session.status.waiting_input" = "Ready for Input";
 "session.action.allow" = "Allow";
 "session.action.deny" = "Deny";
-"session.overflow" = "+%d more sessions";
 ```
 
 ---
+
+## 数据流
 
 ```
 AIManager.sessions (字典)
