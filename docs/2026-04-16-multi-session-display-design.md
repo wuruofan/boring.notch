@@ -1,8 +1,26 @@
 # BoringNotch 多 Session 展示功能设计
 
 - **创建日期**: 2026-04-16
-- **状态**: 待审核
+- **更新日期**: 2026-04-16
+- **状态**: 已实现（部分待完善）
 - **参考实现**: Claude-Island (`/Users/wuruofan/mine/rfw/claude-island/`)
+
+---
+
+## 实现状态摘要
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| SessionPriorityHelper | ✅ 已实现 | `boringNotch/AI/Views/SessionPriorityHelper.swift` |
+| SessionRow | ✅ 已实现 | `boringNotch/AI/Views/SessionRow.swift` |
+| SessionList | ✅ 已实现 | `boringNotch/AI/Views/SessionList.swift` |
+| ApprovalButtons | ✅ 已实现 | `boringNotch/AI/Views/ApprovalButtons.swift` |
+| AIManager 计算属性 | ✅ 已实现 | `sortedSessions`, `highestPrioritySession`, `approvalPendingCount` |
+| 动态高度 | ✅ 已实现 | 1-3 session 动态，4+ 固定+滚动 |
+| ESC 打断处理 | ✅ 已实现 | Stop 事件映射为 idle 状态 |
+| AgentIconView 状态图标 | ✅ 已实现 | ProcessingSpinner, PermissionIndicatorIcon 等 |
+| AILiveActivity 收起态 | ✅ 已实现 | 使用 highestPrioritySession |
+| **第二行显示逻辑** | ⏳ 待完善 | 需匹配 Claude-Island 显示 lastMessage 而非状态文本 |
 
 ---
 
@@ -35,7 +53,7 @@ struct AISessionState: Identifiable {
 }
 ```
 
-**无需新增字段**。
+**排序所需字段已完备，无需新增**。但第二行显示逻辑（见"待完善"部分）需要额外字段。
 
 ---
 
@@ -296,3 +314,117 @@ ForEach → SessionRow (每个 session)
 3. 测试多 session 展开态：应该看到 session 列表
 4. 测试权限审批：应该在对应 session 卡片显示按钮
 5. 测试高度动态调整：session 数量变化时 notch 高度应跟随变化
+
+---
+
+## 待完善：第二行显示逻辑
+
+### 问题
+
+当前 `SessionRow.swift` 的第二行显示逻辑：
+- 有工具时：显示格式化后的工具名
+- 无工具时：显示状态文本（"Paused", "Processing...", "Needs approval" 等）
+
+### 目标行为（参考 Claude-Island）
+
+Claude-Island `InstanceRow` 的第二行显示逻辑（`ClaudeInstancesView.swift` 第 161-224 行）：
+
+```swift
+// 等待审批时：工具名 + input
+if isWaitingForApproval, let toolName = session.pendingToolName {
+    HStack(spacing: 4) {
+        Text(MCPToolFormatter.formatToolName(toolName))
+            .foregroundColor(TerminalColors.amber.opacity(0.9))
+        if let input = session.pendingToolInput {
+            Text(input)
+                .foregroundColor(.white.opacity(0.5))
+        }
+    }
+}
+
+// 非等待审批时：根据 lastMessageRole 显示
+else if let role = session.lastMessageRole {
+    switch role {
+    case "tool":
+        // 工具调用：显示工具名 + input
+        HStack(spacing: 4) {
+            if let toolName = session.lastToolName {
+                Text(MCPToolFormatter.formatToolName(toolName))
+            }
+            if let input = session.lastMessage {
+                Text(input)
+            }
+        }
+    case "user":
+        // 用户消息："You:" + 内容
+        HStack(spacing: 4) {
+            Text("You:")
+            if let msg = session.lastMessage {
+                Text(msg)
+            }
+        }
+    default:
+        // Assistant 消息：直接显示内容
+        if let msg = session.lastMessage {
+            Text(msg)
+        }
+    }
+}
+```
+
+### 实现要点
+
+1. **AISessionState 模型扩展**：
+
+   需要添加字段：
+   ```swift
+   struct AISessionState: Identifiable {
+       // 现有字段...
+       var lastMessageRole: String?      // "user", "assistant", "tool"
+       var lastMessage: String?          // 消息内容（截断后的）
+       var lastToolName: String?         // 最后一次工具名（tool role 时使用）
+   }
+   ```
+
+2. **Hook 事件解析扩展**：
+
+   `AIHookEvent.swift` 需要解析 Python hook 发送的消息字段：
+   ```swift
+   struct AIHookEvent: Codable {
+       // 现有字段...
+       let lastMessageRole: String?
+       let lastMessage: String?
+   }
+   ```
+
+3. **SessionRow.swift 修改**：
+
+   将 `secondLineText` 和 `secondLineColor` 计算属性改为匹配 Claude-Island 逻辑。
+
+4. **Python Hook 脚本修改**：
+
+   `ai-hook-server.py` 需要在事件中添加 `last_message_role` 和 `last_message` 字段。
+
+### 验证
+
+- 用户发送消息后，第二行显示 "You: <消息内容>"
+- Assistant 回复时，第二行显示 assistant 消息内容
+- 工具调用时，第二行显示工具名 + input
+- 等待审批时，第二行显示工具名（橙色）+ input
+
+---
+
+## 文件变更清单（已实现）
+
+| 文件 | 操作 |
+|------|------|
+| `boringNotch/AI/Views/SessionPriorityHelper.swift` | 新建 |
+| `boringNotch/AI/Views/SessionRow.swift` | 新建 |
+| `boringNotch/AI/Views/SessionList.swift` | 新建 |
+| `boringNotch/AI/Views/ApprovalButtons.swift` | 新建 |
+| `boringNotch/AI/AIManager.swift` | 修改（计算属性） |
+| `boringNotch/models/BoringViewModel.swift` | 修改（动态高度） |
+| `boringNotch/AI/Views/AILiveActivity.swift` | 修改 |
+| `boringNotch/AI/Views/AgentIconView.swift` | 修改（状态图标） |
+| `boringNotch/AI/Models/AIHookEvent.swift` | 修改（toPhase 映射） |
+| `boringNotch/components/Notch/NotchHomeView.swift` | 修改（集成 SessionList） |
