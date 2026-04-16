@@ -137,13 +137,21 @@ class BoringViewModel: NSObject, ObservableObject {
     }
 
     /// Dynamic open notch size - expands when AI sessions exist and showing home view
+    /// Height calculation:
+    /// - 1 session: baseHeight + 55
+    /// - 2 sessions: baseHeight + 55 + 63
+    /// - 3 sessions: baseHeight + 55 + 63*2 = baseHeight + 181
+    /// - 4+ sessions: fixed at baseHeight + 181, with scroll
     var effectiveOpenNotchSize: CGSize {
         let baseHeight = openNotchSize.height
         // Only add extra height when sessions exist AND we're on home view (not shelf)
         if coordinator.currentView == .home && !aiManager.sessions.isEmpty && Defaults[.aiShowInNotch] {
-            // Fixed visible area height: ~200 for session list (scrollable)
-            // SessionList has maxHeight: 200, supports scrolling for overflow
-            return CGSize(width: openNotchSize.width, height: baseHeight + 200)
+            let sessionCount = aiManager.sortedSessions.count
+            // Cap at 3 sessions for height, scroll for more
+            let effectiveCount = min(sessionCount, 3)
+            // First session: 55px, each additional: 63px (card height + spacing)
+            let extraHeight: CGFloat = 55 + CGFloat(max(0, effectiveCount - 1)) * 63
+            return CGSize(width: openNotchSize.width, height: baseHeight + extraHeight)
         }
         return openNotchSize
     }

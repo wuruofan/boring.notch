@@ -1,9 +1,20 @@
 import SwiftUI
 
 /// Session list container with scroll support.
-/// Reference: Claude-Island ClaudeInstancesView
+/// Height adapts to session count (capped at 3):
+/// - 1 session: ~55px
+/// - 2 sessions: ~118px
+/// - 3 sessions: ~181px (max, scroll for more)
 struct SessionList: View {
     @ObservedObject var aiManager = AIManager.shared
+
+    /// Calculate visible height based on session count (capped at 3)
+    private var visibleHeight: CGFloat {
+        let sessionCount = aiManager.sortedSessions.count
+        let effectiveCount = min(sessionCount, 3)
+        // First session: 55px, each additional: 63px
+        return 55 + CGFloat(max(0, effectiveCount - 1)) * 63
+    }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -18,7 +29,7 @@ struct SessionList: View {
             }
             .padding(.vertical, 4)
         }
-        .frame(maxHeight: 200)  // Fixed visible area height
+        .frame(maxHeight: visibleHeight)  // Dynamic height, capped at 3 sessions
         .animation(.spring(response: 0.35, dampingFraction: 0.75), value: aiManager.sortedSessions.count)
     }
 }
