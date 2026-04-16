@@ -24,20 +24,21 @@ struct SessionRow: View {
             statusIndicator
                 .frame(width: 16, height: 16)
 
-            // Project and tool info
+            // Project and tool info - fixed two lines
             VStack(alignment: .leading, spacing: 2) {
+                // Line 1: Project name
                 Text(projectName)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.white)
                     .lineLimit(1)
 
-                if let tool = session.currentTool {
-                    Text(formatToolName(tool))
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundColor(isWaitingForApproval ? claudeOrange.opacity(0.9) : .white.opacity(0.5))
-                        .lineLimit(1)
-                }
+                // Line 2: Tool name or status text
+                Text(secondLineText)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundColor(secondLineColor)
+                    .lineLimit(1)
             }
+            .frame(height: 34, alignment: .leading)  // Fixed height for two lines
 
             Spacer(minLength: 0)
 
@@ -58,6 +59,48 @@ struct SessionRow: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .onHover { isHovered = $0 }
+    }
+
+    /// Second line text: tool name or status
+    private var secondLineText: String {
+        if let tool = session.currentTool {
+            return formatToolName(tool)
+        }
+        // No tool: show status text
+        switch session.phase {
+        case .processing:
+            return "Processing..."
+        case .runningTool:
+            return "Running tool..."
+        case .compacting:
+            return "Compacting..."
+        case .waitingForApproval:
+            return "Needs approval"
+        case .waitingForInput:
+            return "Ready for input"
+        case .idle:
+            return "Paused"
+        case .ended:
+            return "Ended"
+        }
+    }
+
+    /// Second line color based on status
+    private var secondLineColor: Color {
+        if session.currentTool != nil {
+            return isWaitingForApproval ? claudeOrange.opacity(0.9) : .white.opacity(0.5)
+        }
+        // Status text colors
+        switch session.phase {
+        case .waitingForApproval:
+            return claudeOrange.opacity(0.9)
+        case .waitingForInput:
+            return .green.opacity(0.7)
+        case .idle, .ended:
+            return .white.opacity(0.4)
+        default:
+            return .white.opacity(0.5)
+        }
     }
 
     @ViewBuilder

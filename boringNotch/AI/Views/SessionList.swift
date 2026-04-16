@@ -12,8 +12,8 @@ struct SessionList: View {
     private var visibleHeight: CGFloat {
         let sessionCount = aiManager.sortedSessions.count
         let effectiveCount = min(sessionCount, 3)
-        // First session: 55px, each additional: 63px
-        return 55 + CGFloat(max(0, effectiveCount - 1)) * 63
+        // First session: 50px, each additional: 56px
+        return 50 + CGFloat(max(0, effectiveCount - 1)) * 56
     }
 
     var body: some View {

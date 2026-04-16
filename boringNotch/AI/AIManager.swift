@@ -38,7 +38,12 @@ class AIManager: ObservableObject {
 
     /// Sessions sorted by priority (highest first).
     var sortedSessions: [AISessionState] {
-        SessionPriorityHelper.sortSessions(Array(sessions.values))
+        let sorted = SessionPriorityHelper.sortSessions(Array(sessions.values))
+        // Debug: log session count
+        if sessions.count > 0 {
+            appendAILog("sortedSessions: count=\(sessions.count), sessions=\(sessions.keys.map { $0.prefix(8) }.joined(separator: ","))\n")
+        }
+        return sorted
     }
 
     /// The session requiring most attention (for collapsed state display).
