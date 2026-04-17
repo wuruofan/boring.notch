@@ -1,13 +1,18 @@
 import Foundation
+import os.log
+
+private let serverLog = Logger(subsystem: "com.boringnotch.xpchelper", category: "AIHookServer")
 
 /// Core socket server logic that runs inside the XPC Helper (unsandboxed).
 /// Receives events from Claude Code hooks via Unix Domain Socket,
 /// writes them to a state file for the main app to read.
+/// Uses Thread-based polling because DispatchSource/Task don't work reliably in XPC Services.
 class AIHookServerCore {
     static let socketPath = "/tmp/boringnotch-ai.sock"
 
     private var serverSocket: Int32 = -1
-    private var acceptSource: DispatchSourceRead?
+    private var pollingThread: Thread?
+    private var isRunning: Bool = false
     private let queue = DispatchQueue(label: "com.boringnotch.ai.socket", qos: .userInitiated)
 
     private var pendingPermissions: [String: PendingPermission] = [:]
@@ -45,8 +50,12 @@ class AIHookServerCore {
     }
 
     func stop() {
-        acceptSource?.cancel()
-        acceptSource = nil
+        isRunning = false
+        pollingThread = nil
+        if serverSocket >= 0 {
+            close(serverSocket)
+            serverSocket = -1
+        }
         unlink(Self.socketPath)
 
         permissionsLock.lock()
@@ -133,10 +142,11 @@ class AIHookServerCore {
 
         serverSocket = socket(AF_UNIX, SOCK_STREAM, 0)
         guard serverSocket >= 0 else {
-            NSLog("AIHookServerCore: Failed to create socket: \(errno)")
+            serverLog.error("Failed to create socket: \(errno)")
             return
         }
 
+        // Set non-blocking
         let flags = fcntl(serverSocket, F_GETFL)
         _ = fcntl(serverSocket, F_SETFL, flags | O_NONBLOCK)
 
@@ -157,7 +167,7 @@ class AIHookServerCore {
         }
 
         guard bindResult == 0 else {
-            NSLog("AIHookServerCore: Failed to bind socket: \(errno)")
+            serverLog.error("Failed to bind socket: \(errno)")
             close(serverSocket)
             serverSocket = -1
             return
@@ -166,25 +176,39 @@ class AIHookServerCore {
         chmod(Self.socketPath, 0o777)
 
         guard listen(serverSocket, 10) == 0 else {
-            NSLog("AIHookServerCore: Failed to listen: \(errno)")
+            serverLog.error("Failed to listen: \(errno)")
             close(serverSocket)
             serverSocket = -1
             return
         }
 
-        NSLog("AIHookServerCore: Listening on \(Self.socketPath)")
+        serverLog.info("Listening on \(Self.socketPath), starting polling")
 
-        acceptSource = DispatchSource.makeReadSource(fileDescriptor: serverSocket, queue: queue)
-        acceptSource?.setEventHandler { [weak self] in
-            self?.acceptConnection()
-        }
-        acceptSource?.setCancelHandler { [weak self] in
-            if let fd = self?.serverSocket, fd >= 0 {
-                close(fd)
-                self?.serverSocket = -1
+        // Use polling instead of DispatchSource (XPC Service compatibility)
+        startPolling()
+    }
+
+    // MARK: - Polling
+
+    private func startPolling() {
+        isRunning = true
+        pollingThread = Thread { [weak self] in
+            while self?.isRunning == true {
+                self?.pollForConnections()
+                Thread.sleep(forTimeInterval: 0.1)
             }
         }
-        acceptSource?.resume()
+        pollingThread?.start()
+        serverLog.info("Polling thread started")
+    }
+
+    private func pollForConnections() {
+        var pollFd = pollfd(fd: serverSocket, events: Int16(POLLIN), revents: 0)
+        let pollResult = poll(&pollFd, 1, 0)
+
+        if pollResult > 0 && (pollFd.revents & Int16(POLLIN)) != 0 {
+            acceptConnection()
+        }
     }
 
     // MARK: - Connection Handling
@@ -255,7 +279,7 @@ class AIHookServerCore {
                 return nil
             }()
 
-            try? str.write(toFile: Self.stateFilePath, atomically: false, encoding: .utf8)
+            try? str.write(toFile: Self.stateFilePath, atomically: true, encoding: .utf8)
 
             let afterInode: Int? = {
                 if let attrs = try? FileManager.default.attributesOfItem(atPath: Self.stateFilePath),

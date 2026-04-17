@@ -49,7 +49,7 @@ struct AIExpandedView: View {
         case .waitingForInput: return "Waiting for input"
         case .waitingForApproval: return "Needs approval"
         case .compacting: return "Compacting..."
-        case .idle, .ended: return "Idle"
+        case .idle, .ended, .stopPending: return "Idle"
         }
     }
 

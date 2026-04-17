@@ -71,6 +71,74 @@ func toggleSneakPeek(status: Bool, type: SneakContentType, duration: TimeInterva
 
 Claude-Island 已实现 Claude Code 状态监控和权限审批，关键技术：
 
+### Hook ↔ Session 通信机制（完整架构）
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        Claude Code Hook 事件流                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Claude Code                        Hook 脚本                        App │
+│  ┌──────────┐                       ┌──────────┐                    ┌───┐│
+│  │ Hook 触发 │ ──stdin JSON──>       │ 解析事件 │ ──socket──>       │   ││
+│  │ (事件)   │                        │ 构造状态 │                    │UI ││
+│  └──────────┘                       └──────────┘                    └───┘│
+│                                                                          │
+│  Claude Code                        JSONL 文件                       App │
+│  ┌──────────┐                       ┌──────────┐                    ┌───┐│
+│  │ 写入状态 │ ──文件追加──>          │ 文件监听 │ ──中断事件──>      │   ││
+│  │ (JSONL)  │                        │ (实时)   │                    │UI ││
+│  └──────────┘                       └──────────┘                    └───┘│
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 两种 DispatchSource 监听机制
+
+| 监听类型 | 目标 | DispatchSource | 用途 |
+|----------|------|----------------|------|
+| **Socket 监听** | `/tmp/*.sock` | `DispatchSourceRead` | 接收 hook 事件 |
+| **JSONL 监听** | `~/.claude/projects/*.jsonl` | `DispatchSourceFileSystemObject` | 检测 ESC 中断 |
+
+**Socket 监听实现**（参考 `AIHookServerCore.swift`）：
+```swift
+// 监听 Unix Socket 新连接
+acceptSource = DispatchSource.makeReadSource(fileDescriptor: serverSocket, queue: queue)
+acceptSource?.setEventHandler { self?.acceptConnection() }
+acceptSource?.resume()
+```
+
+**JSONL 监听实现**（参考 Claude-Island `JSONLInterruptWatcher.swift`）：
+```swift
+// 监听文件写入事件（实时检测 ESC 中断）
+let source = DispatchSource.makeFileSystemObjectSource(
+    fileDescriptor: fd,
+    eventMask: [.write, .extend],  // 文件追加时触发
+    queue: queue
+)
+source.setEventHandler { self?.checkForInterrupt() }
+source.resume()
+```
+
+### 中断检测（JSONLInterruptWatcher）
+
+**文件**: `ClaudeIsland/Services/Session/JSONLInterruptWatcher.swift`
+
+当 session 进入 `processing` 状态时启动监听 JSONL 文件，检测中断模式：
+```swift
+// 中断内容模式
+private static let interruptContentPatterns = [
+    "Interrupted by user",
+    "[Request interrupted by user]",
+    "\"interrupted\":true"
+]
+```
+
+**优势**：
+- **毫秒级响应**（文件系统事件实时触发）
+- **不影响长任务**（只监听文件，不超时判断）
+- **精确检测**（匹配具体中断内容）
+
 ### Hook 机制
 
 - Python 脚本 `claude-island-state.py` 安装到 `~/.claude/hooks/`
@@ -167,6 +235,31 @@ xcodebuild -scheme boringNotch -configuration Debug build
 # 运行测试（如有）
 xcodebuild test -scheme boringNotch
 ```
+
+## 应用重启（重要）
+
+由于 macOS 进程管理特殊性，`killall` 经常失败。**可靠的重启方法：**
+
+```bash
+# 方法 1：用户手动退出后启动
+# 让用户手动退出应用（Dock 或菜单栏），然后：
+open ~/Library/Developer/Xcode/DerivedData/boringNotch-*/Build/Products/Debug/boringNotch.app
+
+# 方法 2：强制 kill 进程组
+pkill -9 -f "boringNotch.app/Contents/MacOS"
+sleep 2
+open ~/Library/Developer/Xcode/DerivedData/boringNotch-*/Build/Products/Debug/boringNotch.app
+
+# 方法 3：AppleScript 优雅退出
+osascript -e 'quit app "boringNotch"'
+sleep 2
+open <app路径>
+```
+
+**失败原因：**
+- `killall` 需精确匹配进程名（大小写敏感）
+- BoringNotch 有子进程守护（XPC Helper）
+- DerivedData 路径可能变化
 
 ## 当前分支
 

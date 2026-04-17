@@ -41,6 +41,10 @@ struct AIHookEvent: Codable {
             return .ended
         case "idle":
             return .idle
+        case "stop_pending":
+            // Special status: Swift-side will decide based on idle_prompt timing
+            // Return a placeholder, AIManager will handle the logic
+            return .stopPending
         default:
             // Fallback: only SessionEnd always means ended
             if event == "SessionEnd" {

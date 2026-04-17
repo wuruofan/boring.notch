@@ -190,7 +190,8 @@ struct SleepIcon: View {
     @State private var zOffset: CGFloat = 0
     @State private var opacity: Double = 0.4
 
-    init(size: CGFloat = 14, color: Color = .white.opacity(0.5)) {
+    // Default to brighter purple for better visibility on dark background
+    init(size: CGFloat = 14, color: Color = Color(red: 0.75, green: 0.55, blue: 0.95).opacity(0.9)) {
         self.size = size
         self.color = color
     }
@@ -277,6 +278,46 @@ struct ApprovalBadge: View {
     }
 }
 
+// MARK: - Sleeping Crab Icon (crab with zZ on head)
+struct SleepingCrabIcon: View {
+    let size: CGFloat
+    let crabColor: Color
+    let sleepColor: Color
+    var animateLegs: Bool = false
+
+    @State private var zOffset: CGFloat = 0
+
+    // Brighter purple zZ color for better visibility on dark background
+    private let purpleColor = Color(red: 0.75, green: 0.55, blue: 0.95).opacity(0.9)
+
+    init(size: CGFloat = 16, crabColor: Color = claudeOrange, sleepColor: Color? = nil, animateLegs: Bool = false) {
+        self.size = size
+        self.crabColor = crabColor
+        self.sleepColor = sleepColor ?? purpleColor
+        self.animateLegs = animateLegs
+    }
+
+    private let timer = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            // Main crab icon
+            ClaudeCrabIcon(size: size, color: crabColor, animateLegs: animateLegs)
+
+            // zZ floating above crab's head (top-right corner)
+            SleepIcon(size: size * 0.5, color: sleepColor)
+                .offset(x: size * 0.3, y: -size * 0.15)
+                .opacity(0.9)
+        }
+        .frame(width: size, height: size)
+        .onReceive(timer) { _ in
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                zOffset = -2
+            }
+        }
+    }
+}
+
 // MARK: - Session Status Icon (unified icon for session phase)
 struct SessionStatusIcon: View {
     let phase: AISessionPhase
@@ -290,13 +331,13 @@ struct SessionStatusIcon: View {
     var body: some View {
         switch phase {
         case .processing, .runningTool, .compacting:
-            AgentIconView(size: size, animateLegs: true)
+            AgentIconView(size: size, animateLegs: true)  // Running crab
         case .waitingForApproval:
             PermissionIndicatorIcon(size: size, color: claudeOrange)
         case .waitingForInput:
-            ReadyForInputIndicatorIcon(size: size, color: .green)
-        case .idle, .ended:
-            SleepIcon(size: size, color: .white.opacity(0.5))
+            AgentIconView(size: size, animateLegs: false)  // Static crab (ready for input)
+        case .idle, .ended, .stopPending:
+            SleepingCrabIcon(size: size, crabColor: claudeOrange.opacity(0.7))  // Crab + purple zZ
         }
     }
 }

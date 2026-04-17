@@ -13,7 +13,7 @@ enum SessionPriorityHelper {
             return 1  // Active work
         case .waitingForInput:
             return 2  // Ready for new input
-        case .idle, .ended:
+        case .idle, .ended, .stopPending:
             return 3  // Lowest
         }
     }

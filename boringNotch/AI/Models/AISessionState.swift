@@ -8,6 +8,7 @@ enum AISessionPhase: String, Codable {
     case waitingForApproval = "waiting_for_approval"
     case compacting
     case ended
+    case stopPending = "stop_pending"  // Special: awaiting Swift-side decision
 
     /// Only waiting_for_approval truly needs user attention.
     /// waiting_for_input means session is ready for new prompt (normal idle state).

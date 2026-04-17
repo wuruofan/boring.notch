@@ -11,7 +11,7 @@ struct AIStatusAnimationView: View {
 
     var body: some View {
         switch phase {
-        case .processing, .runningTool:
+        case .processing, .runningTool, .compacting:
             ProcessingSpinner()
                 .frame(width: size, height: size)
 
@@ -19,16 +19,12 @@ struct AIStatusAnimationView: View {
             PermissionIndicatorIcon(size: size, color: claudeOrange)
 
         case .waitingForInput:
-            // waitingForInput means session ready for new prompt (not needing user action)
-            // Show sleep animation like idle state
-            SleepIcon(size: size, color: .white.opacity(0.5))
+            // Task completed, ready for new input - show green checkmark
+            ReadyForInputIndicatorIcon(size: size, color: .green)
 
-        case .compacting:
-            ProcessingSpinner()
-                .frame(width: size, height: size)
-
-        case .idle, .ended:
-            SleepIcon(size: size, color: .white.opacity(0.5))
+        case .idle, .ended, .stopPending:
+            // ESC interrupt or sleep - show purple zZ
+            SleepIcon(size: size)  // Uses purple by default now
         }
     }
 }

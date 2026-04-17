@@ -586,7 +586,7 @@ struct AIStatusCardExpanded: View {
             Circle()
                 .fill(Color.green)
                 .frame(width: 6, height: 6)
-        case .idle, .ended:
+        case .idle, .ended, .stopPending:
             Circle()
                 .fill(Color.white.opacity(0.2))
                 .frame(width: 6, height: 6)

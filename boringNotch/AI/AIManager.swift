@@ -39,9 +39,10 @@ class AIManager: ObservableObject {
     /// Sessions sorted by priority (highest first).
     var sortedSessions: [AISessionState] {
         let sorted = SessionPriorityHelper.sortSessions(Array(sessions.values))
-        // Debug: log session count
+        // Debug: log session details with full IDs
         if sessions.count > 0 {
-            appendAILog("sortedSessions: count=\(sessions.count), sessions=\(sessions.keys.map { $0.prefix(8) }.joined(separator: ","))\n")
+            let details = sessions.keys.map { k in "\(k):\(sessions[k]?.phase.rawValue ?? "?")" }.joined(separator: ",")
+            appendAILog("sortedSessions: count=\(sessions.count), dict=[\(details)]\n")
         }
         return sorted
     }
@@ -66,6 +67,7 @@ class AIManager: ObservableObject {
     private var hookServer: AIHookServer?
     private var cancellables = Set<AnyCancellable>()
     private var persistentPeekTimeoutTask: Task<Void, Never>?
+    private var staleProcessingCleanupTimer: Timer?
 
     private static let logPath: String = {
         let cachesPath = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.path ?? ""
@@ -98,6 +100,13 @@ class AIManager: ObservableObject {
                 self?.handlePermissionFailure(sessionId: sessionId, toolUseId: toolUseId)
             }
         }
+
+        // Set up XPC interrupt detection callback
+        AIXPCClient.shared.onInterruptDetected = { [weak self] sessionId in
+            Task { @MainActor in
+                self?.handleXPCInterrupt(sessionId: sessionId)
+            }
+        }
     }
 
     // MARK: - Lifecycle
@@ -115,10 +124,19 @@ class AIManager: ObservableObject {
             isConnected = success
             appendAILog("AIManager: XPC startServer result = \(success)\n")
         }
+
+        // Start cleanup timer for stale processing sessions (every 10 seconds)
+        staleProcessingCleanupTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.convertStaleProcessingToIdle()
+            }
+        }
     }
 
     func stop() {
         hookServer?.stop()
+        staleProcessingCleanupTimer?.invalidate()
+        staleProcessingCleanupTimer = nil
         Task {
             _ = await AIXPCClient.shared.stopServer()
         }
@@ -136,7 +154,7 @@ class AIManager: ObservableObject {
         let phase = event.toPhase()
 
         // Append log for event handling
-        appendAILog("handleHookEvent: event=\(event.event) phase=\(phase.rawValue) sessionId=\(sessionId.isEmpty ? "empty" : sessionId.prefix(8))\n")
+        appendAILog("handleHookEvent: event=\(event.event) phase=\(phase.rawValue) sessionId=\(sessionId)\n")
 
         // Handle termination events: only remove session when truly ended
         // Stop can mean ESC interrupt (phase=idle) - keep session, update state
@@ -199,6 +217,22 @@ class AIManager: ObservableObject {
         session.tty = event.tty
         session.lastUpdated = Date()
 
+        // Handle stopPending: keep as idle temporarily, let idle_prompt override
+        // Note: Hook event order is unpredictable due to polling/async issues
+        // idle_prompt may arrive AFTER Stop, so we don't make final decision here
+        if phase == .stopPending {
+            // Temporarily set to idle - will be overridden by idle_prompt if task completed
+            session.phase = .idle
+            appendAILog("handleHookEvent: Stop → idle (temporary, will be overridden by idle_prompt if task completed)\n")
+        }
+
+        // idle_prompt event: always means task completed, override any previous state
+        // idle_prompt is only sent by Claude Code when task is actually done
+        if phase == .waitingForInput {
+            session.phase = .waitingForInput
+            appendAILog("handleHookEvent: idle_prompt → waitingForInput (task completed)\n")
+        }
+
         if let tool = event.tool {
             session.currentTool = tool
         }
@@ -219,6 +253,21 @@ class AIManager: ObservableObject {
         }
 
         sessions[effectiveSessionId] = session
+
+        // Start XPC interrupt watcher when session enters processing state
+        if session.phase == .processing, let cwd = session.cwd {
+            Task {
+                await AIXPCClient.shared.startInterruptWatcher(sessionId: effectiveSessionId, cwd: cwd)
+            }
+            appendAILog("handleHookEvent: Started XPC interrupt watcher for \(effectiveSessionId.prefix(8))\n")
+        }
+
+        // Stop XPC interrupt watcher when session ends or becomes idle
+        if session.phase == .ended || session.phase == .idle || session.phase == .waitingForInput {
+            Task {
+                await AIXPCClient.shared.stopInterruptWatcher(sessionId: effectiveSessionId)
+            }
+        }
 
         // Update active session - only truly active phases (processing, running tool, compacting)
         // or waiting for approval (needs user decision)
@@ -262,6 +311,7 @@ class AIManager: ObservableObject {
         let show = (isActive || hasIdleSessions) && Defaults[.aiShowInNotch]
         appendAILog("updateCoordinator: isActive=\(isActive), hasIdleSessions=\(hasIdleSessions), show=\(show)\n")
         appendAILog("updateCoordinator: sneakPeek.show=\(coordinator.sneakPeek.show), isAI=\(coordinator.sneakPeek.type == .ai)\n")
+        appendAILog("updateCoordinator: expandingView.show=\(coordinator.expandingView.show), type=\(coordinator.expandingView.type)\n")
 
         if show {
             appendAILog("updateCoordinator: Calling toggleSneakPeek(status=true, type=.ai)\n")
@@ -354,5 +404,77 @@ class AIManager: ObservableObject {
     func clearStaleSessions() {
         let threshold = Date().addingTimeInterval(-300)
         sessions = sessions.filter { $0.value.lastUpdated > threshold }
+    }
+
+    /// Convert stale processing sessions to idle.
+    /// Different timeouts for different phases:
+    /// - processing: 15 seconds (thinking shouldn't take too long)
+    /// - running_tool: 120 seconds (tools like Bash can take minutes)
+    /// - compacting: 60 seconds (context compression needs time)
+    func convertStaleProcessingToIdle() {
+        let now = Date()
+        var changed = false
+
+        for (sessionId, session) in sessions {
+            let timeout: TimeInterval
+            switch session.phase {
+            case .processing:
+                timeout = 15  // Thinking phase - short timeout
+            case .runningTool:
+                timeout = 120  // Tool execution - long timeout (2 minutes)
+            case .compacting:
+                timeout = 60  // Context compression - medium timeout
+            default:
+                continue  // Not an active phase, skip
+            }
+
+            if now.timeIntervalSince(session.lastUpdated) > timeout {
+                sessions[sessionId]?.phase = .idle
+                changed = true
+                appendAILog("convertStaleProcessingToIdle: Session \(sessionId.prefix(8)) timed out from \(session.phase.rawValue) to idle (timeout=\(timeout)s)\n")
+
+                // If this was the active session, need to re-evaluate activeSessionId
+                if activeSessionId == sessionId {
+                    activeSessionId = nil
+                    isActive = false
+                    for remaining in sessions.values where remaining.id != sessionId {
+                        if remaining.phase.isActive || remaining.phase == .waitingForApproval {
+                            activeSessionId = remaining.id
+                            isActive = true
+                            appendAILog("convertStaleProcessingToIdle: Found other active session \(remaining.id.prefix(8))\n")
+                            break
+                        }
+                    }
+                }
+            }
+        }
+
+        // Update UI if any session changed
+        if changed {
+            updateCoordinator()
+        }
+    }
+}
+
+// MARK: - XPC Interrupt Handling
+
+extension AIManager {
+    /// Handle interrupt detected by XPC Helper via Darwin Notification
+    func handleXPCInterrupt(sessionId: String) {
+        // Convert processing session to idle on interrupt detection
+        if var session = sessions[sessionId] {
+            session.phase = .idle
+            session.lastUpdated = Date()
+            sessions[sessionId] = session
+            appendAILog("handleXPCInterrupt: Session \(sessionId.prefix(8)) interrupted -> idle\n")
+
+            // Stop XPC watcher for this session
+            Task {
+                await AIXPCClient.shared.stopInterruptWatcher(sessionId: sessionId)
+            }
+
+            // Update coordinator to reflect state change
+            updateCoordinator()
+        }
     }
 }

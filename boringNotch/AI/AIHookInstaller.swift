@@ -301,14 +301,16 @@ struct AIHookInstaller {
             cwd = input_data.get("cwd") or os.environ.get("CLAUDE_WORKING_DIRECTORY", "")
 
             # Map event to status
+            # Note: Stop can mean ESC interrupt OR task completion
+            # Swift-side will use idle_prompt timing to distinguish
             status_map = {
                 "UserPromptSubmit": "processing",
                 "PreToolUse": "running_tool",
                 "PostToolUse": "processing",
                 "PermissionRequest": "waiting_for_approval",
-                "Stop": "idle",  # ESC interrupt or normal stop - show sleep animation
-                "SubagentStop": "idle",
-                "SessionStart": "idle",  # Startup - show sleep animation
+                "Stop": "stop_pending",  # Special: Swift will decide based on idle_prompt timing
+                "SubagentStop": "waiting_for_input",
+                "SessionStart": "waiting_for_input",
                 "SessionEnd": "ended",
                 "PreCompact": "compacting",
             }
@@ -319,7 +321,7 @@ struct AIHookInstaller {
                 if notification_type == "permission_prompt":
                     return
                 elif notification_type == "idle_prompt":
-                    status = "idle"  # ESC interrupted - show sleep animation
+                    status = "waiting_for_input"  # Task completed, show checkmark
                 else:
                     status = "notification"
             else:

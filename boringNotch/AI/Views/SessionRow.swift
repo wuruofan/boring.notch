@@ -15,7 +15,7 @@ struct SessionRow: View {
     }
 
     private var isIdle: Bool {
-        session.phase == .idle || session.phase == .ended || session.phase == .waitingForInput
+        session.phase == .idle || session.phase == .ended || session.phase == .waitingForInput || session.phase == .stopPending
     }
 
     var body: some View {
@@ -79,9 +79,11 @@ struct SessionRow: View {
         case .waitingForInput:
             return "Ready for input"
         case .idle:
-            return "Paused"
+            return "Idle"
         case .ended:
             return "Ended"
+        case .stopPending:
+            return "Stopping..."
         }
     }
 
@@ -112,8 +114,8 @@ struct SessionRow: View {
             PermissionIndicatorIcon(size: 16, color: claudeOrange)
         case .waitingForInput:
             ReadyForInputIndicatorIcon(size: 16, color: .green)
-        case .idle, .ended:
-            SleepIcon(size: 16, color: .white.opacity(0.5))
+        case .idle, .ended, .stopPending:
+            SleepIcon(size: 16)  // Uses purple by default
         }
     }
 

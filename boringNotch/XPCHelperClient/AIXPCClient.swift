@@ -1,9 +1,12 @@
 import AsyncXPCConnection
 import Foundation
 
+/// Darwin notification name for interrupt detection
+let kInterruptNotificationName = "com.boringnotch.ai.interrupt"
+
 /// Client for the AI XPC Helper service.
 /// Connects to the unsandboxed helper to manage the socket server,
-/// and reads state files for event data.
+/// JSONL interrupt watchers, and reads state files for event data.
 final class AIXPCClient {
     nonisolated static let shared = AIXPCClient()
 
@@ -12,8 +15,17 @@ final class AIXPCClient {
     private var remoteService: RemoteXPCService<BoringNotchAIXPCHelperProtocol>?
     private var connection: NSXPCConnection?
 
+    /// Callback when interrupt is detected via Darwin Notification
+    var onInterruptDetected: ((String) -> Void)?
+
     deinit {
         connection?.invalidate()
+        CFNotificationCenterRemoveObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            nil,
+            nil,
+            nil
+        )
     }
 
     // MARK: - Connection Management
@@ -49,7 +61,53 @@ final class AIXPCClient {
 
         connection = conn
         remoteService = service
+
+        // Set up Darwin Notification listener for interrupts
+        setupDarwinNotificationListener()
+
         return service
+    }
+
+    // MARK: - Darwin Notification Listener
+
+    private func setupDarwinNotificationListener() {
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            nil,
+            { center, observer, name, object, userInfo in
+                // Read interrupt files from /tmp
+                let tmpPath = "/tmp"
+                guard let files = try? FileManager.default.contentsOfDirectory(atPath: tmpPath) else {
+                    return
+                }
+
+                let interruptFiles = files.filter { $0.hasPrefix("boringnotch-interrupt-") && $0.hasSuffix(".txt") }
+                for fileName in interruptFiles {
+                    let filePath = tmpPath + "/" + fileName
+                    // Extract session ID from filename
+                    let sessionId = fileName
+                        .replacingOccurrences(of: "boringnotch-interrupt-", with: "")
+                        .replacingOccurrences(of: ".txt", with: "")
+
+                    // Read and clean up
+                    if let content = try? String(contentsOfFile: filePath),
+                       content == sessionId {
+                        // Clean up the file
+                        try? FileManager.default.removeItem(atPath: filePath)
+
+                        // Notify callback
+                        Task { @MainActor in
+                            AIXPCClient.shared.onInterruptDetected?(sessionId)
+                        }
+                    }
+                }
+            },
+            kInterruptNotificationName as CFString,
+            nil,
+            CFNotificationSuspensionBehavior.deliverImmediately
+        )
+
+        NSLog("AIXPCClient: Darwin notification listener set up for interrupts")
     }
 
     // MARK: - Server Management
@@ -151,6 +209,38 @@ final class AIXPCClient {
             }
         } catch {
             return "/tmp/boringnotch-ai.sock"
+        }
+    }
+
+    // MARK: - JSONL Interrupt Watching
+
+    nonisolated func startInterruptWatcher(sessionId: String, cwd: String) async -> Bool {
+        do {
+            let service = await MainActor.run { ensureRemoteService() }
+            return try await service.withContinuation { service, continuation in
+                service.startInterruptWatcher(sessionId: sessionId, cwd: cwd) { success in
+                    NSLog("AIXPCClient: startInterruptWatcher returned \(success) for \(sessionId.prefix(8))")
+                    continuation.resume(returning: success)
+                }
+            }
+        } catch {
+            NSLog("AIXPCClient: startInterruptWatcher failed: \(error)")
+            return false
+        }
+    }
+
+    nonisolated func stopInterruptWatcher(sessionId: String) async -> Bool {
+        do {
+            let service = await MainActor.run { ensureRemoteService() }
+            return try await service.withContinuation { service, continuation in
+                service.stopInterruptWatcher(sessionId: sessionId) { success in
+                    NSLog("AIXPCClient: stopInterruptWatcher returned \(success) for \(sessionId.prefix(8))")
+                    continuation.resume(returning: success)
+                }
+            }
+        } catch {
+            NSLog("AIXPCClient: stopInterruptWatcher failed: \(error)")
+            return false
         }
     }
 }

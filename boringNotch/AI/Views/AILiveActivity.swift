@@ -31,7 +31,7 @@ struct DualLiveActivity: View {
                 SessionStatusIcon(phase: session.phase, size: iconSize)
                     .frame(width: iconSize, height: iconSize)
             } else {
-                SleepIcon(size: iconSize, color: .white.opacity(0.5))
+                SleepIcon(size: iconSize)  // Uses purple by default
                     .frame(width: iconSize, height: iconSize)
             }
 
@@ -89,7 +89,7 @@ struct DualLiveActivity: View {
                 AIStatusAnimationView(phase: session.phase, size: iconSize)
                     .frame(width: iconSize, height: iconSize)
             } else {
-                SleepIcon(size: iconSize, color: .white.opacity(0.5))
+                SleepIcon(size: iconSize)  // Uses purple by default
                     .frame(width: iconSize, height: iconSize)
             }
         }
@@ -125,7 +125,7 @@ struct AIOnlyLiveActivity: View {
                 SessionStatusIcon(phase: session.phase, size: iconSize)
                     .frame(width: iconSize, height: iconSize)
             } else {
-                SleepIcon(size: iconSize, color: .white.opacity(0.5))
+                SleepIcon(size: iconSize)  // Uses purple by default
                     .frame(width: iconSize, height: iconSize)
             }
 
@@ -141,7 +141,7 @@ struct AIOnlyLiveActivity: View {
                 AIStatusAnimationView(phase: session.phase, size: iconSize)
                     .frame(width: iconSize, height: iconSize)
             } else {
-                SleepIcon(size: iconSize, color: .white.opacity(0.5))
+                SleepIcon(size: iconSize)  // Uses purple by default
                     .frame(width: iconSize, height: iconSize)
             }
         }
