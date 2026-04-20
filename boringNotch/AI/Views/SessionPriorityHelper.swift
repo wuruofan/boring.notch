@@ -9,14 +9,16 @@ enum SessionPriorityHelper {
         switch phase {
         case .waitingForApproval:
             return 0  // Highest - needs immediate user action
-        case .toolFailed, .error:
-            return 1  // High - needs user attention (same as active work)
+        case .error:
+            return 1  // Error - user needs to notice
+        case .toolFailed:
+            return 2  // Tool failed - user needs to notice
         case .processing, .runningTool, .compacting:
-            return 2  // Active work
+            return 3  // Active work
         case .waitingForInput:
-            return 3  // Ready for new input
+            return 4  // Ready for new input
         case .idle, .ended, .stopPending:
-            return 4  // Lowest
+            return 5  // Lowest
         }
     }
 
