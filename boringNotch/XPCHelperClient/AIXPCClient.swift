@@ -4,6 +4,9 @@ import Foundation
 /// Darwin notification name for interrupt detection
 let kInterruptNotificationName = "com.boringnotch.ai.interrupt"
 
+/// Darwin notification name for state file updates
+let kStateUpdateNotificationName = "com.boringnotch.ai.stateupdate"
+
 /// Client for the AI XPC Helper service.
 /// Connects to the unsandboxed helper to manage the socket server,
 /// JSONL interrupt watchers, and reads state files for event data.
@@ -17,6 +20,9 @@ final class AIXPCClient {
 
     /// Callback when interrupt is detected via Darwin Notification
     var onInterruptDetected: ((String) -> Void)?
+
+    /// Callback when state file update is detected via Darwin Notification
+    var onStateUpdateDetected: (() -> Void)?
 
     deinit {
         connection?.invalidate()
@@ -65,6 +71,9 @@ final class AIXPCClient {
         // Set up Darwin Notification listener for interrupts
         setupDarwinNotificationListener()
 
+        // Set up Darwin Notification listener for state updates
+        setupStateUpdateListener()
+
         return service
     }
 
@@ -108,6 +117,24 @@ final class AIXPCClient {
         )
 
         NSLog("AIXPCClient: Darwin notification listener set up for interrupts")
+    }
+
+    private func setupStateUpdateListener() {
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            nil,
+            { center, observer, name, object, userInfo in
+                // Notify callback to scan state files
+                Task { @MainActor in
+                    AIXPCClient.shared.onStateUpdateDetected?()
+                }
+            },
+            kStateUpdateNotificationName as CFString,
+            nil,
+            CFNotificationSuspensionBehavior.deliverImmediately
+        )
+
+        NSLog("AIXPCClient: Darwin notification listener set up for state updates")
     }
 
     // MARK: - Server Management
