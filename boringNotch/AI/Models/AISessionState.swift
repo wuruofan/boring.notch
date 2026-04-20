@@ -20,7 +20,7 @@ enum AISessionPhase: String, Codable {
     }
 
     var isActive: Bool {
-        self == .processing || self == .runningTool || self == .compacting || self == .toolFailed || self == .error
+        self == .processing || self == .runningTool || self == .compacting
     }
 }
 
