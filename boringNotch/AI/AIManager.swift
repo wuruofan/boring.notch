@@ -292,7 +292,7 @@ class AIManager: ObservableObject {
             activeSessionId = effectiveSessionId
             isActive = true
             appendAILog("handleHookEvent: Set isActive=true, phase=\(phase.rawValue)\n")
-        } else if activeSessionId == effectiveSessionId && (phase == .idle || phase == .ended) {
+        } else if activeSessionId == effectiveSessionId && (phase == .idle || phase == .ended || phase == .toolFailed || phase == .error) {
             activeSessionId = nil
             isActive = false
             appendAILog("handleHookEvent: Set isActive=false for session \(effectiveSessionId.prefix(8))\n")
