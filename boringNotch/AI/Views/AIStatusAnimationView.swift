@@ -22,15 +22,15 @@ struct AIStatusAnimationView: View {
             // Task completed, ready for new input - show green checkmark
             ReadyForInputIndicatorIcon(size: size, color: .green)
 
-        case .idle, .ended, .stopPending:
-            // ESC interrupt or sleep - show purple zZ
-            SleepIcon(size: size)  // Uses purple by default now
+        case .toolFailed:
+            FailedIndicatorIcon(size: size)
 
-        case .toolFailed, .error:
-            // Tool execution failed or API error - show red warning icon
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: size * 0.8))
-                .foregroundColor(.red)
+        case .error:
+            ErrorIndicatorIcon(size: size)
+
+        case .idle, .ended, .stopPending:
+            // ESC interrupt or sleep - show white zZ
+            SleepIcon(size: size, color: .white.opacity(0.4))
         }
     }
 }
