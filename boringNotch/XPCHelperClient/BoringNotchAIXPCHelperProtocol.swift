@@ -21,6 +21,12 @@ import Foundation
     /// Get the socket path
     func getSocketPath(with reply: @escaping (String) -> Void)
 
+    // MARK: - State File Cleanup
+
+    /// Clean up the state file for a specific session.
+    /// Called by main app after processing SessionEnd event.
+    func cleanupStateFile(sessionId: String, with reply: @escaping (Bool) -> Void)
+
     // MARK: - JSONL Interrupt Watching
 
     /// Start watching a session's JSONL file for interrupts.

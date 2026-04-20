@@ -243,4 +243,19 @@ final class AIXPCClient {
             return false
         }
     }
+
+    nonisolated func cleanupStateFile(sessionId: String) async -> Bool {
+        do {
+            let service = await MainActor.run { ensureRemoteService() }
+            return try await service.withContinuation { service, continuation in
+                service.cleanupStateFile(sessionId: sessionId) { success in
+                    NSLog("AIXPCClient: cleanupStateFile returned \(success) for \(sessionId.prefix(8))")
+                    continuation.resume(returning: success)
+                }
+            }
+        } catch {
+            NSLog("AIXPCClient: cleanupStateFile failed: \(error)")
+            return false
+        }
+    }
 }
