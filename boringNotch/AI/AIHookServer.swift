@@ -5,10 +5,16 @@ import Foundation
 /// received events to a state file. This class polls that file.
 /// Note: File watching via DispatchSource is blocked by sandbox, so we use polling.
 class AIHookServer {
-    /// State file path in sandbox container Caches directory
+    /// State file path in sandbox container Caches directory (deprecated, now per-session)
     static let stateFilePath: String = {
         let cachesPath = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.path ?? ""
         return cachesPath + "/boringnotch-ai-state.json"
+    }()
+
+    /// Base path for all per-session state files
+    static let stateFileBasePath: String = {
+        let cachesPath = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.path ?? ""
+        return cachesPath
     }()
 
     static let logPath: String = {
@@ -20,7 +26,7 @@ class AIHookServer {
     var onPermissionFailure: ((_ sessionId: String, _ toolUseId: String) -> Void)?
 
     private var pollingTask: Task<Void, Never>?
-    private var lastContentHash: String?
+    private var lastHashes: [String: String] = [:]  // sessionId -> hash
 
     // MARK: - Helper
 
@@ -58,7 +64,7 @@ class AIHookServer {
     // MARK: - Polling
 
     private func startPolling() {
-        appendLog("startPolling: Starting polling task\n")
+        appendLog("startPolling: Starting multi-file polling task\n")
         pollingTask = Task.detached { [weak self] in
             var count = 0
             while !Task.isCancelled {
@@ -66,43 +72,100 @@ class AIHookServer {
                 if count % 50 == 0 {  // Log every 10 seconds (50 * 200ms)
                     self?.appendLog("polling: tick \(count)\n")
                 }
-                self?.pollStateFile()
+                self?.pollStateFiles()
                 try? await Task.sleep(for: .milliseconds(200))
             }
             self?.appendLog("polling: Task cancelled\n")
         }
     }
 
-    private func pollStateFile() {
-        let path = Self.stateFilePath
-        // Check file exists
-        let exists = FileManager.default.fileExists(atPath: path)
+    private func pollStateFiles() {
+        let basePath = Self.stateFileBasePath
 
-        // Try to read
-        let url = URL(fileURLWithPath: path)
-        let readResult: Data? = try? Data(contentsOf: url)
-
-        if !exists {
-            appendLog("pollStateFile: File not exists at \(path)\n")
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: basePath) else {
+            appendLog("pollStateFiles: Cannot read directory \(basePath)\n")
             return
         }
 
-        guard let data = readResult, !data.isEmpty else {
-            if readResult == nil {
-                appendLog("pollStateFile: Data read failed (file exists but read error)\n")
-            } else {
-                appendLog("pollStateFile: Data is empty\n")
-            }
+        let stateFiles = files.filter {
+            $0.hasPrefix("boringnotch-ai-state-") && $0.hasSuffix(".json")
+        }
+
+        for fileName in stateFiles {
+            let filePath = basePath + "/" + fileName
+            processStateFileWithDedup(path: filePath, fileName: fileName)
+        }
+
+        // Zombie file cleanup: delete files older than timeout
+        cleanupZombieFiles(files: stateFiles, basePath: basePath)
+    }
+
+    private func processStateFileWithDedup(path: String, fileName: String) {
+        // Check file modification time for zombie detection
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+              let modDate = attrs[.modificationDate] as? Date else {
             return
         }
 
-        // Hash-based deduplication
+        // Parse file to check status - use longer timeout for waiting_for_approval
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)), !data.isEmpty else {
+            return
+        }
+
+        let isApprovalFile: Bool = {
+            guard let event = try? JSONDecoder().decode(AIHookEvent.self, from: data) else { return false }
+            return event.status == "waiting_for_approval"
+        }()
+
+        // Skip zombie files (older than timeout)
+        let skipTimeout: TimeInterval = isApprovalFile ? 1800 : 300  // 30 min for approval, 5 min otherwise
+        if Date().timeIntervalSince(modDate) > skipTimeout {
+            appendLog("processStateFileWithDedup: Skipping zombie file \(fileName)\n")
+            return
+        }
+
+        // Extract sessionId from filename
+        let sessionId = fileName
+            .replacingOccurrences(of: "boringnotch-ai-state-", with: "")
+            .replacingOccurrences(of: ".json", with: "")
+
+        // Per-file hash deduplication
         let contentHash = data.base64EncodedString()
-        if contentHash == lastContentHash { return }
-        lastContentHash = contentHash
+        if lastHashes[sessionId] == contentHash { return }
+        lastHashes[sessionId] = contentHash
 
-        appendLog("pollStateFile: Got new data (\(data.count) bytes), processing\n")
+        appendLog("processStateFileWithDedup: New data for \(sessionId), processing\n")
         processStateFile(data: data)
+    }
+
+    private func cleanupZombieFiles(files: [String], basePath: String) {
+        for fileName in files {
+            let filePath = basePath + "/" + fileName
+            guard let attrs = try? FileManager.default.attributesOfItem(atPath: filePath),
+                  let modDate = attrs[.modificationDate] as? Date,
+                  let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)) else {
+                continue
+            }
+
+            // Parse file to check status - don't delete if waiting_for_approval
+            let isApprovalFile: Bool = {
+                guard let event = try? JSONDecoder().decode(AIHookEvent.self, from: data) else { return false }
+                return event.status == "waiting_for_approval"
+            }()
+
+            let timeout: TimeInterval = isApprovalFile ? 1800 : 300  // 30 min for approval, 5 min otherwise
+
+            if Date().timeIntervalSince(modDate) > timeout {
+                try? FileManager.default.removeItem(atPath: filePath)
+                appendLog("cleanupZombieFiles: Removed zombie file \(fileName) (timeout=\(timeout)s)\n")
+
+                // Remove from hash cache
+                let sessionId = fileName
+                    .replacingOccurrences(of: "boringnotch-ai-state-", with: "")
+                    .replacingOccurrences(of: ".json", with: "")
+                lastHashes.removeValue(forKey: sessionId)
+            }
+        }
     }
 
     private func processStateFile(data: Data) {
