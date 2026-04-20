@@ -27,23 +27,19 @@ struct DualLiveActivity: View {
     var body: some View {
         HStack(spacing: 6) {
             // Left: AI icon - use highest priority session's status
-            ZStack(alignment: .topLeading) {
+            ZStack(alignment: .topTrailing) {
                 if let session = displaySession {
                     SessionStatusIcon(phase: session.phase, size: iconSize)
-                        .frame(width: iconSize, height: iconSize)
                 } else {
-                    SleepIcon(size: iconSize, color: .white.opacity(0.6))
-                        .frame(width: iconSize, height: iconSize)
+                    SleepIcon(size: iconSize, color: .white.opacity(0.8))
                 }
 
                 // Session count badge (only when multiple sessions)
-                // Note: DualLiveActivity shares space with music, use smaller badge (0.35x vs 1x in AIOnly)
+                // Badge size: 40% of icon, positioned at top-right corner
                 if aiManager.sessions.count > 1 {
-                    SessionCountBadge(count: aiManager.sessions.count, size: iconSize * 0.35)
-                        .offset(x: iconSize * 0.12, y: -iconSize * 0.08)
+                    SessionCountBadge(count: aiManager.sessions.count, badgeSize: iconSize * 0.4)
                 }
             }
-            .frame(width: iconSize, height: iconSize)
 
             // Divider line (subtle separator)
             Rectangle()
@@ -131,22 +127,18 @@ struct AIOnlyLiveActivity: View {
     var body: some View {
         HStack(spacing: 0) {
             // Left: AI icon - use highest priority session's status
-            ZStack(alignment: .topLeading) {
+            ZStack(alignment: .topTrailing) {
                 if let session = displaySession {
                     SessionStatusIcon(phase: session.phase, size: iconSize)
-                        .frame(width: iconSize, height: iconSize)
                 } else {
-                    SleepIcon(size: iconSize, color: .white.opacity(0.6))
-                        .frame(width: iconSize, height: iconSize)
+                    SleepIcon(size: iconSize, color: .white.opacity(0.8))
                 }
 
                 // Session count badge (only when multiple sessions)
                 if aiManager.sessions.count > 1 {
-                    SessionCountBadge(count: aiManager.sessions.count, size: iconSize)
-                        .offset(x: iconSize * 0.15, y: -iconSize * 0.15)
+                    SessionCountBadge(count: aiManager.sessions.count, badgeSize: iconSize * 0.45)
                 }
             }
-            .frame(width: iconSize, height: iconSize)
 
             Rectangle()
                 .fill(.black)
@@ -171,23 +163,22 @@ struct AIOnlyLiveActivity: View {
 // MARK: - Session Count Badge
 struct SessionCountBadge: View {
     let count: Int
-    let size: CGFloat
-
-    init(count: Int, size: CGFloat = 14) {
-        self.count = count
-        self.size = size
-    }
+    let badgeSize: CGFloat  // Diameter of the badge circle
 
     var body: some View {
         ZStack {
+            // Background circle
             Circle()
-                .fill(.white.opacity(0.2))
-                .frame(width: size * 0.6, height: size * 0.6)
+                .fill(Color.red.opacity(0.9))
+                .frame(width: badgeSize, height: badgeSize)
 
+            // Count text - font size proportional to badge diameter
             Text("\(count)")
-                .font(.system(size: size * 0.35, weight: .bold))
+                .font(.system(size: badgeSize * 0.55, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
         }
-        .frame(width: size, height: size)
+        // No extra frame - badge is exactly the circle size
     }
 }

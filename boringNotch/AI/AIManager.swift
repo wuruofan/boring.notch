@@ -494,10 +494,9 @@ class AIManager: ObservableObject {
     }
 
     /// Convert stale processing sessions to idle.
-    /// Different timeouts for different phases:
-    /// - processing: 15 seconds (thinking shouldn't take too long)
-    /// - running_tool: 120 seconds (tools like Bash can take minutes)
-    /// - compacting: 60 seconds (context compression needs time)
+    /// With Darwin Notification, most stale sessions are cleaned by SessionEnd.
+    /// Only keep timeout for error/toolFailed states to reset UI after brief display.
+    /// Note: processing/runningTool/compacting rely on SessionEnd for cleanup.
     func convertStaleProcessingToIdle() {
         let now = Date()
         var changed = false
@@ -505,12 +504,10 @@ class AIManager: ObservableObject {
         for (sessionId, session) in sessions {
             let timeout: TimeInterval
             switch session.phase {
-            case .processing:
-                timeout = 15  // Thinking phase - short timeout
-            case .runningTool:
-                timeout = 120  // Tool execution - long timeout (2 minutes)
-            case .compacting:
-                timeout = 60  // Context compression - medium timeout
+            case .processing, .runningTool, .compacting:
+                // Darwin Notification handles cleanup via SessionEnd
+                // Only timeout if truly stale (5 minutes = zombie detection)
+                timeout = 300
             case .toolFailed:
                 timeout = 10  // Tool failed - short display then back to idle
             case .error:
