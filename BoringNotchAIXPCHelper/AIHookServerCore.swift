@@ -34,6 +34,26 @@ class AIHookServerCore {
         return "/tmp/boringnotch-ai-state.json"
     }()
 
+    /// URL-safe base64 encoding for sessionId to ensure safe file names
+    static func encodeSessionId(_ sessionId: String) -> String {
+        // Use base64url encoding (no +, /, = characters)
+        let data = sessionId.data(using: .utf8) ?? Data()
+        let base64 = data.base64EncodedString()
+        return base64
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
+    /// Base path for all state files
+    static let stateFileBasePath: String = {
+        if let pw = getpwuid(getuid()), let home = pw.pointee.pw_dir {
+            let homePath = String(cString: home)
+            return "\(homePath)/Library/Containers/theboringteam.boringnotch/Data/Library/Caches"
+        }
+        return "/tmp"
+    }()
+
     struct PendingPermission {
         let sessionId: String
         let toolUseId: String
@@ -66,6 +86,24 @@ class AIHookServerCore {
         permissionsLock.unlock()
 
         try? FileManager.default.removeItem(atPath: Self.stateFilePath)
+    }
+
+    /// Delete the state file for a specific session
+    func cleanupStateFile(sessionId: String) -> Bool {
+        let encodedId = Self.encodeSessionId(sessionId)
+        let path = Self.stateFileBasePath + "/boringnotch-ai-state-" + encodedId + ".json"
+
+        if FileManager.default.fileExists(atPath: path) {
+            do {
+                try FileManager.default.removeItem(atPath: path)
+                NSLog("AIHookServerCore: Cleaned up state file for \(sessionId.prefix(8))")
+                return true
+            } catch {
+                NSLog("AIHookServerCore: Failed to cleanup state file: \(error)")
+                return false
+            }
+        }
+        return true  // File doesn't exist, consider it cleaned
     }
 
     @discardableResult
@@ -270,19 +308,23 @@ class AIHookServerCore {
 
         // Write raw event data to state file for main app to read
         if let str = String(data: allData, encoding: .utf8) {
+            // Per-session state file path
+            let encodedId = Self.encodeSessionId(sessionId)
+            let path = Self.stateFileBasePath + "/boringnotch-ai-state-" + encodedId + ".json"
+
             // Diagnostic: log before/after inode to verify atomic write behavior
             let beforeInode: Int? = {
-                if let attrs = try? FileManager.default.attributesOfItem(atPath: Self.stateFilePath),
+                if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
                    let inode = attrs[.systemFileNumber] as? Int {
                     return inode
                 }
                 return nil
             }()
 
-            try? str.write(toFile: Self.stateFilePath, atomically: true, encoding: .utf8)
+            try? str.write(toFile: path, atomically: true, encoding: .utf8)
 
             let afterInode: Int? = {
-                if let attrs = try? FileManager.default.attributesOfItem(atPath: Self.stateFilePath),
+                if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
                    let inode = attrs[.systemFileNumber] as? Int {
                     return inode
                 }

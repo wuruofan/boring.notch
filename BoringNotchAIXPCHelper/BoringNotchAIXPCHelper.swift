@@ -65,4 +65,9 @@ class BoringNotchAIXPCHelper: NSObject, BoringNotchAIXPCHelperProtocol {
         let result = InterruptWatcherManagerCore.shared.stopWatching(sessionId: sessionId)
         reply(result)
     }
+
+    func cleanupStateFile(sessionId: String, with reply: @escaping (Bool) -> Void) {
+        let success = hookServer?.cleanupStateFile(sessionId: sessionId) ?? false
+        reply(success)
+    }
 }
