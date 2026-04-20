@@ -29,8 +29,8 @@ struct AIStatusAnimationView: View {
             ErrorIndicatorIcon(size: size)
 
         case .idle, .ended, .stopPending:
-            // ESC interrupt or sleep - show white zZ
-            SleepIcon(size: size, color: .white.opacity(0.6))
+            // ESC interrupt or sleep - show light purple zZ
+            SleepIcon(size: size)  // Default light purple, no opacity
         }
     }
 }

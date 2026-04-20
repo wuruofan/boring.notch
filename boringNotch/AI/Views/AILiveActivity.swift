@@ -27,17 +27,18 @@ struct DualLiveActivity: View {
     var body: some View {
         HStack(spacing: 6) {
             // Left: AI icon - use highest priority session's status
-            ZStack(alignment: .topTrailing) {
+            ZStack(alignment: .bottomTrailing) {
                 if let session = displaySession {
                     SessionStatusIcon(phase: session.phase, size: iconSize)
                 } else {
-                    SleepIcon(size: iconSize, color: .white.opacity(0.8))
+                    SleepIcon(size: iconSize)  // Default light purple
                 }
 
                 // Session count badge (only when multiple sessions)
-                // Badge size: 40% of icon, positioned at top-right corner
+                // iPhone-style badge: partially outside the icon boundary
                 if aiManager.sessions.count > 1 {
-                    SessionCountBadge(count: aiManager.sessions.count, badgeSize: iconSize * 0.4)
+                    SessionCountBadge(count: aiManager.sessions.count, badgeSize: iconSize * 0.65)
+                        .offset(x: iconSize * 0.35, y: iconSize * 0.25)  // Shift towards bottom-right, slightly higher
                 }
             }
 
@@ -127,16 +128,18 @@ struct AIOnlyLiveActivity: View {
     var body: some View {
         HStack(spacing: 0) {
             // Left: AI icon - use highest priority session's status
-            ZStack(alignment: .topTrailing) {
+            ZStack(alignment: .bottomTrailing) {
                 if let session = displaySession {
                     SessionStatusIcon(phase: session.phase, size: iconSize)
                 } else {
-                    SleepIcon(size: iconSize, color: .white.opacity(0.8))
+                    SleepIcon(size: iconSize)  // Default light purple
                 }
 
                 // Session count badge (only when multiple sessions)
+                // iPhone-style badge: partially outside the icon boundary
                 if aiManager.sessions.count > 1 {
-                    SessionCountBadge(count: aiManager.sessions.count, badgeSize: iconSize * 0.45)
+                    SessionCountBadge(count: aiManager.sessions.count, badgeSize: iconSize * 0.65)
+                        .offset(x: iconSize * 0.35, y: iconSize * 0.25)  // Shift towards bottom-right, slightly higher
                 }
             }
 

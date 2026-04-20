@@ -188,12 +188,14 @@ struct SleepIcon: View {
     let color: Color
 
     @State private var zOffset: CGFloat = 0
-    @State private var opacity: Double = 0.4
+    @State private var opacity: Double = 0.6
 
-    // Default to white.opacity(0.6) for better visibility on dark background
-    init(size: CGFloat = 14, color: Color = .white.opacity(0.6)) {
+    // #DDD6FE - light purple with more purple tone for dark background
+    private let lightPurple = Color(red: 221/255, green: 214/255, blue: 254/255)
+
+    init(size: CGFloat = 14, color: Color? = nil) {
         self.size = size
-        self.color = color
+        self.color = color ?? lightPurple
     }
 
     private let timer = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
@@ -202,14 +204,14 @@ struct SleepIcon: View {
         Canvas { context, canvasSize in
             let scale = size / 30.0
 
-            // Draw "z" letters floating up
-            let zPositions: [(CGFloat, CGFloat, CGFloat)] = [
-                (8, 20, 0.8),   // Bottom z - larger
-                (14, 12, 0.6),  // Middle z - medium
-                (20, 6, 0.4),   // Top z - smallest
+            // Draw "z" letters floating up with opacity animation 0.6~1.0
+            let zPositions: [(CGFloat, CGFloat)] = [
+                (8, 20),   // Bottom z
+                (14, 12),  // Middle z
+                (20, 6),   // Top z
             ]
 
-            for (x, y, alpha) in zPositions {
+            for (x, y) in zPositions {
                 // Simple pixel-art "z" shape
                 let dots: [(CGFloat, CGFloat)] = [
                     (x - 3, y), (x, y), (x + 3, y),       // Top bar
@@ -224,7 +226,7 @@ struct SleepIcon: View {
                         width: 3 * scale,
                         height: 3 * scale
                     )
-                    context.fill(Path(rect), with: .color(color.opacity(alpha * opacity)))
+                    context.fill(Path(rect), with: .color(color.opacity(opacity)))
                 }
             }
         }
@@ -233,7 +235,7 @@ struct SleepIcon: View {
         .onReceive(timer) { _ in
             withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
                 zOffset = -2
-                opacity = 0.7
+                opacity = 1.0
             }
         }
     }
@@ -356,8 +358,8 @@ struct SleepingCrabIcon: View {
 
     @State private var zOffset: CGFloat = 0
 
-    // Brighter purple zZ color for better visibility on dark background
-    private let purpleColor = Color(red: 0.75, green: 0.55, blue: 0.95).opacity(0.9)
+    // #DDD6FE - light purple with more purple tone for dark background
+    private let purpleColor = Color(red: 221/255, green: 214/255, blue: 254/255)
 
     init(size: CGFloat = 16, crabColor: Color = claudeOrange, sleepColor: Color? = nil, animateLegs: Bool = false) {
         self.size = size
@@ -373,10 +375,9 @@ struct SleepingCrabIcon: View {
             // Main crab icon
             ClaudeCrabIcon(size: size, color: crabColor, animateLegs: animateLegs)
 
-            // zZ floating above crab's head (top-right corner)
+            // zZ floating above crab's head (top-right corner, shifted further right)
             SleepIcon(size: size * 0.5, color: sleepColor)
-                .offset(x: size * 0.3, y: -size * 0.15)
-                .opacity(0.9)
+                .offset(x: size * 0.5, y: -size * 0.1)
         }
         .frame(width: size, height: size)
         .onReceive(timer) { _ in
@@ -410,7 +411,7 @@ struct SessionStatusIcon: View {
         case .error:
             ErrorIndicatorIcon(size: size)
         case .idle, .ended, .stopPending:
-            SleepingCrabIcon(size: size, crabColor: claudeOrange.opacity(0.7), sleepColor: .white.opacity(0.6))  // Crab + white zZ
+            SleepingCrabIcon(size: size, crabColor: claudeOrange)  // Crab + zZ with default light purple
         }
     }
 }
