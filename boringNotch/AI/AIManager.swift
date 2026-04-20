@@ -65,6 +65,11 @@ class AIManager: ObservableObject {
     // MARK: - Private
 
     private var hookServer: AIHookServer?
+
+    // Expose for cleanup after SessionEnd
+    static var sharedHookServer: AIHookServer? {
+        AIManager.shared.hookServer
+    }
     private var cancellables = Set<AnyCancellable>()
     private var persistentPeekTimeoutTask: Task<Void, Never>?
     private var staleProcessingCleanupTimer: Timer?
@@ -172,6 +177,20 @@ class AIManager: ObservableObject {
                 // Remove specific session, even if not in dictionary
                 appendAILog("handleHookEvent: Session ended, removing \(sessionId.prefix(8))\n")
                 sessions.removeValue(forKey: sessionId)
+
+                // Delayed cleanup: wait 2 seconds before deleting state file
+                // This ensures the polling loop has time to read the SessionEnd event
+                // Note: Task lifecycle is bound to AIManager; if app exits, zombie cleanup will handle it
+                let sessionIdCopy = sessionId  // Capture for Task
+                Task {
+                    try? await Task.sleep(for: .seconds(2))
+                    await AIXPCClient.shared.cleanupStateFile(sessionId: sessionIdCopy)
+                    // Clear hash entry to prevent memory leak
+                    await MainActor.run {
+                        AIManager.sharedHookServer?.clearHash(sessionId: sessionIdCopy)
+                    }
+                }
+
                 if activeSessionId == sessionId {
                     activeSessionId = nil
                     isActive = false

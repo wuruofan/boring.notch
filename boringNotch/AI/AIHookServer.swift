@@ -61,6 +61,12 @@ class AIHookServer {
         await AIXPCClient.shared.hasPendingPermission(sessionId: sessionId)
     }
 
+    /// Clear hash entry for a session (called after cleanup)
+    func clearHash(sessionId: String) {
+        lastHashes.removeValue(forKey: sessionId)
+        appendLog("clearHash: Removed hash for \(sessionId)\n")
+    }
+
     // MARK: - Polling
 
     private func startPolling() {
