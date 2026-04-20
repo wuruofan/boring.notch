@@ -311,6 +311,16 @@ class AIManager: ObservableObject {
             session.currentTool = tool
         }
 
+        // Store toolInput on PreToolUse for display
+        if event.event == "PreToolUse", let toolInput = event.toolInput {
+            session.toolInput = toolInput
+        }
+
+        // Clear toolInput after tool execution completes (but keep on failure for display)
+        if event.event == "PostToolUse" {
+            session.toolInput = nil
+        }
+
         // Handle permission requests
         if phase == .waitingForApproval, let toolUseId = event.toolUseId {
             session.permissionRequest = AIPermissionRequest(

@@ -38,6 +38,7 @@ struct AISessionState: Identifiable {
     let id: String
     var phase: AISessionPhase
     var currentTool: String?
+    var toolInput: [String: AnyCodable]?  // Store tool input for display
     var cwd: String?
     var pid: Int?
     var tty: String?
