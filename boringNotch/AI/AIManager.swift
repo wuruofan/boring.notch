@@ -162,6 +162,55 @@ class AIManager: ObservableObject {
 
     private func handleHookEvent(_ event: AIHookEvent) {
         let sessionId = event.sessionId
+
+        // ===== Early-return events (no phase change) =====
+        // Must process BEFORE toPhase() call
+
+        // Handle CwdChanged: only update cwd, no phase change
+        if event.status == "cwd_changed" || event.event == "CwdChanged" {
+            let effectiveSessionId = !sessionId.isEmpty ? sessionId : "unknown"
+            if !event.cwd.isEmpty {
+                sessions[effectiveSessionId]?.cwd = event.cwd
+                objectWillChange.send()  // Trigger SwiftUI update for cwd display
+                appendAILog("handleHookEvent: CwdChanged for \(effectiveSessionId.prefix(8)), new cwd=\(event.cwd)\n")
+            }
+            return  // No phase change, no updateCoordinator
+        }
+
+        // Handle SubagentStart: only increment count, no phase change
+        if event.status == "subagent_active" || event.event == "SubagentStart" {
+            let effectiveSessionId = !sessionId.isEmpty ? sessionId : "unknown"
+            if sessions[effectiveSessionId] == nil {
+                // Defensive: create session if not exists (should have SessionStart first)
+                sessions[effectiveSessionId] = AISessionState(
+                    id: effectiveSessionId,
+                    phase: .processing,
+                    cwd: event.cwd,  // Fill cwd from event
+                    lastUpdated: Date(),
+                    subagentCount: 1
+                )
+                appendAILog("handleHookEvent: Created session for SubagentStart \(effectiveSessionId.prefix(8)) cwd=\(event.cwd)\n")
+            } else {
+                sessions[effectiveSessionId]?.subagentCount += 1
+                objectWillChange.send()  // Trigger SwiftUI update for [n] badge
+                appendAILog("handleHookEvent: SubagentStart for \(effectiveSessionId.prefix(8)), count=\(sessions[effectiveSessionId]?.subagentCount ?? 0)\n")
+            }
+            return  // No phase change
+        }
+
+        // Handle SubagentStop: only decrement count, no phase change
+        if event.status == "subagent_done" || event.event == "SubagentStop" {
+            let effectiveSessionId = !sessionId.isEmpty ? sessionId : "unknown"
+            let currentCount = sessions[effectiveSessionId]?.subagentCount ?? 0
+            sessions[effectiveSessionId]?.subagentCount = max(0, currentCount - 1)
+            objectWillChange.send()  // Trigger SwiftUI update for [n] badge
+            appendAILog("handleHookEvent: SubagentStop for \(effectiveSessionId.prefix(8)), count=\(sessions[effectiveSessionId]?.subagentCount ?? 0)\n")
+            return  // No phase change
+        }
+
+        // ===== Phase-transforming events =====
+        // Now call toPhase() for other events
+
         let phase = event.toPhase()
 
         // Append log for event handling
@@ -182,6 +231,8 @@ class AIManager: ObservableObject {
             } else {
                 // Remove specific session, even if not in dictionary
                 appendAILog("handleHookEvent: Session ended, removing \(sessionId.prefix(8))\n")
+                // Force reset subagentCount on SessionEnd
+                sessions[sessionId]?.subagentCount = 0
                 sessions.removeValue(forKey: sessionId)
 
                 // Delayed cleanup: wait 2 seconds before deleting state file
