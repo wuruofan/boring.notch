@@ -269,13 +269,22 @@ git commit -m "feat(xpc-client): add cleanupStateFile method"
         for fileName in files {
             let filePath = basePath + "/" + fileName
             guard let attrs = try? FileManager.default.attributesOfItem(atPath: filePath),
-                  let modDate = attrs[.modificationDate] as? Date else {
+                  let modDate = attrs[.modificationDate] as? Date,
+                  let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)) else {
                 continue
             }
             
-            if Date().timeIntervalSince(modDate) > 300 {  // 5 minutes
+            // Parse file to check status - don't delete if waiting_for_approval
+            let isApprovalFile: Bool = {
+                guard let event = try? JSONDecoder().decode(AIHookEvent.self, from: data) else { return false }
+                return event.status == "waiting_for_approval"
+            }()
+            
+            let timeout: TimeInterval = isApprovalFile ? 1800 : 300  // 30 min for approval, 5 min otherwise
+            
+            if Date().timeIntervalSince(modDate) > timeout {
                 try? FileManager.default.removeItem(atPath: filePath)
-                appendLog("cleanupZombieFiles: Removed zombie file \(fileName)\n")
+                appendLog("cleanupZombieFiles: Removed zombie file \(fileName) (timeout=\(timeout)s)\n")
                 
                 // Remove from hash cache
                 let sessionId = fileName
@@ -334,189 +343,109 @@ git commit -m "feat(ai-server): multi-file polling with per-file hash dedup and 
 
 ---
 
-## Task 5: AIManager SessionEnd 延迟清理
+## Task 5: AIManager SessionEnd 延迟清理 + lastHashes 清除
 
 **Files:**
 - Modify: `boringNotch/AI/AIManager.swift`
+- Modify: `boringNotch/AI/AIHookServer.swift`
 
-- [ ] **Step 1: 在 handleHookEvent 中添加延迟清理**
+- [ ] **Step 1: AIHookServer 新增 clearHash 方法**
+
+在 `AIHookServer.swift` 中添加公开方法供 AIManager 调用：
+
+```swift
+    /// Clear hash entry for a session (called after cleanup)
+    func clearHash(sessionId: String) {
+        lastHashes.removeValue(forKey: sessionId)
+        appendLog("clearHash: Removed hash for \(sessionId)\n")
+    }
+```
+
+- [ ] **Step 2: 在 handleHookEvent 中添加延迟清理**
 
 找到 `handleHookEvent` 中处理 SessionEnd 的部分（约 162-190 行），在 `sessions.removeValue(forKey: sessionId)` 后添加：
 
 ```swift
                 // Delayed cleanup: wait 2 seconds before deleting state file
                 // This ensures the polling loop has time to read the SessionEnd event
+                // Note: Task lifecycle is bound to AIManager; if app exits, zombie cleanup will handle it
+                let sessionIdCopy = sessionId  // Capture for Task
                 Task {
                     try? await Task.sleep(for: .seconds(2))
-                    await AIXPCClient.shared.cleanupStateFile(sessionId: sessionId)
+                    await AIXPCClient.shared.cleanupStateFile(sessionId: sessionIdCopy)
+                    // Clear hash entry to prevent memory leak
+                    await MainActor.run {
+                        AIHookServer.shared?.clearHash(sessionId: sessionIdCopy)
+                    }
                 }
 ```
 
 具体改动位置：在 `updateCoordinator()` 调用前添加上述代码。
 
-- [ ] **Step 2: 验证编译**
+**注意：** AIHookServer 需要 expose 为 shared instance 或通过 AIManager 持有引用。当前 AIManager 中 hookServer 是 private property，可以改为：
+
+```swift
+    private var hookServer: AIHookServer?
+    
+    // Expose for cleanup
+    static var sharedHookServer: AIHookServer? {
+        AIManager.shared.hookServer
+    }
+```
+
+- [ ] **Step 3: 验证编译**
 
 运行：`xcodebuild -scheme boringNotch -configuration Debug build 2>&1 | tail -20`
 预期：BUILD SUCCEEDED
 
-- [ ] **Step 3: 提交**
+- [ ] **Step 4: 提交**
 
 ```bash
-git add boringNotch/AI/AIManager.swift
-git commit -m "feat(ai-manager): delay state file cleanup after SessionEnd processing"
+git add boringNotch/AI/AIManager.swift boringNotch/AI/AIHookServer.swift
+git commit -m "feat(ai-manager): delay cleanup + clearHash to prevent memory leak"
 ```
 
 ---
 
-## Task 6: Hook 脚本更新（新增事件映射）
-
-**Files:**
-- Modify: `boringNotch/AI/AIHookInstaller.swift`
-
-- [ ] **Step 1: 更新 generateHookScript 中的 status_map**
-
-将 `generateHookScript()` 方法中的 `status_map` 字典从：
-
-```python
-            status_map = {
-                "UserPromptSubmit": "processing",
-                "PreToolUse": "running_tool",
-                "PostToolUse": "processing",
-                "PermissionRequest": "waiting_for_approval",
-                "Stop": "stop_pending",
-                "SubagentStop": "waiting_for_input",
-                "SessionStart": "waiting_for_input",
-                "SessionEnd": "ended",
-                "PreCompact": "compacting",
-            }
-```
-
-改为：
-
-```python
-            status_map = {
-                "UserPromptSubmit": "processing",
-                "PreToolUse": "running_tool",
-                "PostToolUse": "processing",
-                "PostToolUseFailure": "tool_failed",
-                "PermissionRequest": "waiting_for_approval",
-                "PermissionDenied": "processing",
-                "Stop": "stop_pending",
-                "StopFailure": "error",
-                "SubagentStart": "subagent_active",
-                "SubagentStop": "subagent_done",
-                "SessionStart": "waiting_for_input",
-                "SessionEnd": "ended",
-                "PreCompact": "compacting",
-                "PostCompact": "processing",
-                "CwdChanged": "cwd_changed",
-                "Elicitation": "waiting_for_approval",
-            }
-```
-
-- [ ] **Step 2: 更新 hookEvents 列表**
-
-将 `updateSettings()` 中的 `hookEvents` 列表从：
-
-```swift
-        let hookEvents: [(String, [[String: Any]])] = [
-            ("UserPromptSubmit", withoutMatcher),
-            ("PreToolUse", withMatcher),
-            ("PostToolUse", withMatcher),
-            ("PermissionRequest", withMatcherAndTimeout),
-            ("Notification", withMatcher),
-            ("Stop", withoutMatcher),
-            ("SubagentStop", withoutMatcher),
-            ("SessionStart", withoutMatcher),
-            ("SessionEnd", withoutMatcher),
-            ("PreCompact", preCompactConfig),
-        ]
-```
-
-改为：
-
-```swift
-        let hookEvents: [(String, [[String: Any]])] = [
-            ("UserPromptSubmit", withoutMatcher),
-            ("PreToolUse", withMatcher),
-            ("PostToolUse", withMatcher),
-            ("PostToolUseFailure", withMatcher),
-            ("PermissionRequest", withMatcherAndTimeout),
-            ("PermissionDenied", withoutMatcher),
-            ("Stop", withoutMatcher),
-            ("StopFailure", withoutMatcher),
-            ("SubagentStart", withoutMatcher),
-            ("SubagentStop", withoutMatcher),
-            ("SessionStart", withoutMatcher),
-            ("SessionEnd", withoutMatcher),
-            ("PreCompact", preCompactConfig),
-            ("PostCompact", withoutMatcher),
-            ("CwdChanged", withoutMatcher),
-            ("Elicitation", withMatcherAndTimeout),
-            ("Notification", withMatcher),
-        ]
-```
-
-- [ ] **Step 3: 更新 Hook 脚本的状态文件写入逻辑**
-
-在 `generateHookScript()` 的 `send_event` 函数中，将 socket 方式改为直接文件写入：
-
-```python
-def send_event(state):
-    """Write state directly to file (primary method for reliability)."""
-    # Get session_id for per-session file
-    session_id = state.get("session_id", "")
-    
-    # URL-safe base64 encode session_id
-    import base64
-    encoded_id = base64.b64encode(session_id.encode()).decode()
-    encoded_id = encoded_id.replace("+", "-").replace("/", "_").rstrip("=")
-    
-    # Write to per-session state file
-    state_file_path = os.path.expanduser("~/Library/Containers/theboringteam.boringnotch/Data/Library/Caches/boringnotch-ai-state-" + encoded_id + ".json")
-    
-    try:
-        with open(state_file_path, 'w') as f:
-            json.dump(state, f)
-    except Exception as e:
-        print(f"BoringNotch hook file write error: {e}", file=sys.stderr)
-    
-    # Also try socket for permission requests (needs response)
-    if state.get("status") == "waiting_for_approval":
-        try:
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            sock.settimeout(TIMEOUT_SECONDS)
-            sock.connect(SOCKET_PATH)
-            sock.sendall(json.dumps(state).encode())
-            response = sock.recv(4096)
-            sock.close()
-            return json.loads(response.decode())
-        except Exception as e:
-            print(f"BoringNotch hook socket error: {e}", file=sys.stderr)
-    
-    return None
-```
-
-- [ ] **Step 4: 验证编译**
-
-运行：`xcodebuild -scheme boringNotch -configuration Debug build 2>&1 | tail -20`
-预期：BUILD SUCCEEDED
-
-- [ ] **Step 5: 提交**
-
-```bash
-git add boringNotch/AI/AIHookInstaller.swift
-git commit -m "feat(hook-installer): add new event mappings for tool_failed, error, subagent, etc"
-```
-
----
-
-## Task 7: AIHookEvent 新增 status 解码
+## Task 6: AIHookEvent 新增 status 解码 + AISessionPhase 新枚举（先于 Hook 脚本更新）
 
 **Files:**
 - Modify: `boringNotch/AI/Models/AIHookEvent.swift`
+- Modify: `boringNotch/AI/Models/AISessionState.swift`
 
-- [ ] **Step 1: 更新 toPhase 方法**
+**依赖说明：** 此 Task 必须先于 Task 7（Hook 脚本）完成，否则 new status 映射会返回 .idle 导致状态错误。
+
+- [ ] **Step 1: AISessionPhase 新增枚举值**
+
+在 `AISessionState.swift` 的 `AISessionPhase` enum 中添加：
+
+```swift
+enum AISessionPhase: String, Codable {
+    case idle
+    case processing
+    case runningTool = "running_tool"
+    case waitingForInput = "waiting_for_input"
+    case waitingForApproval = "waiting_for_approval"
+    case compacting
+    case ended
+    case stopPending = "stop_pending"
+    case toolFailed = "tool_failed"  // New
+    case error                       // New
+    
+    /// Only waiting_for_approval truly needs user attention.
+    /// waiting_for_input means session is ready for new prompt (normal idle state).
+    /// toolFailed and error also need attention.
+    var needsAttention: Bool {
+        self == .waitingForApproval || self == .toolFailed || self == .error
+    }
+
+    var isActive: Bool {
+        self == .processing || self == .runningTool || self == .compacting || self == .toolFailed || self == .error
+    }
+}
+```
+
+- [ ] **Step 2: 更新 toPhase 方法**
 
 在 `AIHookEvent.swift` 的 `toPhase()` 方法中添加新 status 的处理：
 
@@ -546,7 +475,7 @@ git commit -m "feat(hook-installer): add new event mappings for tool_failed, err
         case "subagent_active", "subagent_done":
             return .processing  // Keep current phase, will handle in AIManager
         case "cwd_changed":
-            return .processing  // No phase change, just update cwd
+            return .processing  // No phase change, will update cwd in AIManager
         default:
             if event == "SessionEnd" {
                 return .ended
@@ -554,27 +483,6 @@ git commit -m "feat(hook-installer): add new event mappings for tool_failed, err
             return .idle
         }
     }
-```
-
-- [ ] **Step 2: AISessionPhase 新增枚举值**
-
-在 `AISessionState.swift` 的 `AISessionPhase` enum 中添加：
-
-```swift
-enum AISessionPhase: String, Codable {
-    case idle
-    case processing
-    case runningTool = "running_tool"
-    case waitingForInput = "waiting_for_input"
-    case waitingForApproval = "waiting_for_approval"
-    case compacting
-    case ended
-    case stopPending = "stop_pending"
-    case toolFailed = "tool_failed"  // New
-    case error                       // New
-    
-    // ... rest unchanged
-}
 ```
 
 - [ ] **Step 3: 验证编译**
@@ -586,7 +494,81 @@ enum AISessionPhase: String, Codable {
 
 ```bash
 git add boringNotch/AI/Models/AIHookEvent.swift boringNotch/AI/Models/AISessionState.swift
-git commit -m "feat(ai-models): add toolFailed and error phases"
+git commit -m "feat(ai-models): add toolFailed and error phases with needsAttention/isActive"
+```
+
+---
+
+## Task 7: Hook 脚本更新（新增事件映射）
+
+**Files:**
+- Modify: `boringNotch/AI/AIHookInstaller.swift`
+
+**依赖说明：** 此 Task 依赖 Task 6（模型层）完成，确保 new status 有对应的 phase 定义。
+
+- [ ] **Step 1: 更新 generateHookScript 中的 status_map**
+
+将 `generateHookScript()` 方法中的 `status_map` 字典改为：
+
+```python
+            status_map = {
+                "UserPromptSubmit": "processing",
+                "PreToolUse": "running_tool",
+                "PostToolUse": "processing",
+                "PostToolUseFailure": "tool_failed",
+                "PermissionRequest": "waiting_for_approval",
+                "PermissionDenied": "processing",
+                "Stop": "stop_pending",
+                "StopFailure": "error",
+                "SubagentStart": "subagent_active",
+                "SubagentStop": "subagent_done",
+                "SessionStart": "waiting_for_input",
+                "SessionEnd": "ended",
+                "PreCompact": "compacting",
+                "PostCompact": "processing",
+                "CwdChanged": "cwd_changed",
+                "Elicitation": "waiting_for_approval",
+            }
+```
+
+**注意：保持现有 Socket 通信架构，不修改 send_event 函数。** XPC Helper 会处理 per-session 文件写入和 Darwin Notification。
+
+- [ ] **Step 2: 更新 hookEvents 列表**
+
+将 `updateSettings()` 中的 `hookEvents` 列表改为：
+
+```swift
+        let hookEvents: [(String, [[String: Any]])] = [
+            ("UserPromptSubmit", withoutMatcher),
+            ("PreToolUse", withMatcher),
+            ("PostToolUse", withMatcher),
+            ("PostToolUseFailure", withMatcher),
+            ("PermissionRequest", withMatcherAndTimeout),
+            ("PermissionDenied", withoutMatcher),
+            ("Stop", withoutMatcher),
+            ("StopFailure", withoutMatcher),
+            ("SubagentStart", withoutMatcher),
+            ("SubagentStop", withoutMatcher),
+            ("SessionStart", withoutMatcher),
+            ("SessionEnd", withoutMatcher),
+            ("PreCompact", preCompactConfig),
+            ("PostCompact", withoutMatcher),
+            ("CwdChanged", withoutMatcher),
+            ("Elicitation", withMatcherAndTimeout),
+            ("Notification", withMatcher),
+        ]
+```
+
+- [ ] **Step 3: 验证编译**
+
+运行：`xcodebuild -scheme boringNotch -configuration Debug build 2>&1 | tail -20`
+预期：BUILD SUCCEEDED
+
+- [ ] **Step 4: 提交**
+
+```bash
+git add boringNotch/AI/AIHookInstaller.swift
+git commit -m "feat(hook-installer): add new event mappings (socket arch unchanged)"
 ```
 
 ---

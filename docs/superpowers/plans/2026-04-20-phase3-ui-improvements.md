@@ -152,6 +152,8 @@ struct ErrorIndicatorIcon: View {
 }
 ```
 
+**注意：像素坐标为硬编码设计，需在实际渲染后视觉验证效果。** FailedIndicatorIcon（感叹号）可能偏右，ErrorIndicatorIcon（X 形）像素数量少可能不够清晰。
+
 - [ ] **Step 2: 更新 SleepIcon 颜色**
 
 将 `SleepIcon` 的默认颜色改为 `white.opacity(0.4)`：
@@ -249,7 +251,59 @@ git commit -m "feat(ui): add toolFailed and error status animations"
 
 ---
 
-## Task 4: 新建 ToolInputFormatter 工具输入格式化器
+## Task 4: AISessionState 新增 toolInput 字段 + AIManager PreToolUse 存储
+
+**Files:**
+- Modify: `boringNotch/AI/Models/AISessionState.swift`
+- Modify: `boringNotch/AI/AIManager.swift`
+
+**重要：** 当前 toolInput 只在 permissionRequest 时存储，非审批状态无法获取。需要新增字段并在 PreToolUse 时存储。
+
+- [ ] **Step 1: AISessionState 新增 toolInput 字段**
+
+```swift
+struct AISessionState: Identifiable {
+    let id: String
+    var phase: AISessionPhase
+    var currentTool: String?
+    var toolInput: [String: AnyCodable]?  // New: store tool input for display
+    var cwd: String?
+    var pid: Int?
+    var tty: String?
+    var permissionRequest: AIPermissionRequest?
+    var lastUpdated: Date
+    var subagentCount: Int = 0
+}
+```
+
+- [ ] **Step 2: AIManager 在 PreToolUse 时存储 toolInput**
+
+在 `handleHookEvent` 的 PreToolUse 处理中添加：
+
+```swift
+        // Store toolInput on PreToolUse for display
+        if event.event == "PreToolUse", let toolInput = event.toolInput {
+            sessions[effectiveSessionId]?.toolInput = toolInput
+        }
+```
+
+位置：在 `session.currentTool = event.tool` 设置之后。
+
+- [ ] **Step 3: 验证编译**
+
+运行：`xcodebuild -scheme boringNotch -configuration Debug build 2>&1 | tail -20`
+预期：BUILD SUCCEEDED
+
+- [ ] **Step 4: 提交**
+
+```bash
+git add boringNotch/AI/Models/AISessionState.swift boringNotch/AI/AIManager.swift
+git commit -m "feat(ai-state): add toolInput field and store on PreToolUse"
+```
+
+---
+
+## Task 5: 新建 ToolInputFormatter 工具输入格式化器
 
 **Files:**
 - Create: `boringNotch/AI/Views/ToolInputFormatter.swift`
@@ -425,7 +479,7 @@ git commit -m "feat(ui): add ToolInputFormatter for second line display"
 
 ---
 
-## Task 5: SessionRow 子 agent 角标 + 工具输入展示
+## Task 6: SessionRow 子 agent 角标 + 工具输入展示（使用 session.toolInput）
 
 **Files:**
 - Modify: `boringNotch/AI/Views/SessionRow.swift`
@@ -440,7 +494,6 @@ git commit -m "feat(ui): add ToolInputFormatter for second line display"
         let parts = cwd.split(separator: "/")
         let baseName = parts.last.map(String.init) ?? "Claude Code"
         
-        // Add subagent count badge if > 0
         if session.subagentCount > 0 {
             return "\(baseName) [\(session.subagentCount)]"
         }
@@ -448,15 +501,15 @@ git commit -m "feat(ui): add ToolInputFormatter for second line display"
     }
 ```
 
-- [ ] **Step 2: 更新第二行展示使用 ToolInputFormatter**
+- [ ] **Step 2: 更新第二行展示使用 session.toolInput**
 
-将 `secondLineText` 和 `secondLineColor` 计算属性改为：
+将 `secondLineDisplay` 改为使用 `session.toolInput`：
 
 ```swift
     private var secondLineDisplay: (text: String, color: Color) {
         ToolInputFormatter.format(
             tool: session.currentTool ?? "",
-            input: session.permissionRequest?.toolInput,
+            input: session.toolInput,  // Use session.toolInput, not permissionRequest
             phase: session.phase
         )
     }
@@ -470,9 +523,7 @@ git commit -m "feat(ui): add ToolInputFormatter for second line display"
     }
 ```
 
-- [ ] **Step 3: 更新状态指示器**
-
-将 `statusIndicator` 计算属性改为：
+- [ ] **Step 3: 更新状态指示器（使用新图标）**
 
 ```swift
     @ViewBuilder
@@ -503,12 +554,12 @@ git commit -m "feat(ui): add ToolInputFormatter for second line display"
 
 ```bash
 git add boringNotch/AI/Views/SessionRow.swift
-git commit -m "feat(ui): add subagent badge and tool input display in SessionRow"
+git commit -m "feat(ui): subagent badge and toolInput display in SessionRow"
 ```
 
 ---
 
-## Task 6: AILiveActivity 紧凑态 Session 数量角标
+## Task 7: AILiveActivity 紧凑态 Session 数量角标 + DualLiveActivity 改动
 
 **Files:**
 - Modify: `boringNotch/AI/Views/AILiveActivity.swift`
@@ -567,9 +618,29 @@ struct SessionCountBadge: View {
             .frame(width: iconSize, height: iconSize)
 ```
 
-- [ ] **Step 3: 同样更新 DualLiveActivity**
+- [ ] **Step 3: 在 DualLiveActivity 中添加角标（完整代码）**
 
-在 `DualLiveActivity` 中同样更新左侧 AI 图标部分。
+更新 `DualLiveActivity` 的左侧 AI 图标部分：
+
+```swift
+            // Left: AI icon - use highest priority session's status
+            ZStack(alignment: .topLeading) {
+                if let session = displaySession {
+                    SessionStatusIcon(phase: session.phase, size: iconSize)
+                        .frame(width: iconSize, height: iconSize)
+                } else {
+                    SleepIcon(size: iconSize, color: .white.opacity(0.4))
+                        .frame(width: iconSize, height: iconSize)
+                }
+                
+                // Session count badge (only when multiple sessions)
+                if aiManager.sessions.count > 1 {
+                    SessionCountBadge(count: aiManager.sessions.count, size: iconSize * 0.35)
+                        .offset(x: iconSize * 0.12, y: -iconSize * 0.08)
+                }
+            }
+            .frame(width: iconSize, height: iconSize)
+```
 
 - [ ] **Step 4: 验证编译**
 
@@ -580,12 +651,12 @@ struct SessionCountBadge: View {
 
 ```bash
 git add boringNotch/AI/Views/AILiveActivity.swift
-git commit -m "feat(ui): add session count badge to compact mode"
+git commit -m "feat(ui): add session count badge to compact mode (AIOnly + Dual)"
 ```
 
 ---
 
-## Task 7: 验证 UI 改进
+## Task 8: 验证 UI 改进
 
 **Files:**
 - Test: 手动测试

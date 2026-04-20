@@ -152,16 +152,20 @@ git commit -m "feat(xpc-client): add stateupdate Darwin Notification listener"
 
 ---
 
-## Task 3: AIHookServer 事件驱动 + 5s 兜底轮询
+## Task 3: AIHookServer 事件驱动 + 动态兜底轮询（waitingForApproval 加速）
 
 **Files:**
 - Modify: `boringNotch/AI/AIHookServer.swift`
 
-- [ ] **Step 1: 添加回调设置**
+**说明：** waitingForApproval 状态对用户体验影响大，需要更短的兜底轮询间隔（1s 而非 5s）。
 
-在 `start()` 方法中，启动轮询前注册 AIXPCClient 的回调：
+- [ ] **Step 1: 添加动态轮询间隔**
+
+在 `AIHookServer` 中添加状态检测和动态间隔：
 
 ```swift
+    private var hasWaitingForApproval: Bool = false
+    
     func start() {
         appendLog("AIHookServer.start() - path=\(Self.stateFileBasePath)\n")
         
@@ -170,31 +174,65 @@ git commit -m "feat(xpc-client): add stateupdate Darwin Notification listener"
             self?.pollStateFiles()
         }
         
+        // Observe AIManager for waitingForApproval state changes
+        Task { @MainActor in
+            for await _ in NotificationCenter.default.notifications(named: .AIWaitingForApprovalChanged) {
+                self?.updatePollingSpeed()
+            }
+        }
+        
         startPolling()
+    }
+    
+    private func updatePollingSpeed() {
+        // Check if any session is waitingForApproval
+        hasWaitingForApproval = AIManager.shared.hasAnyPendingApproval
+        appendLog("updatePollingSpeed: waitingForApproval=\(hasWaitingForApproval)\n")
     }
 ```
 
-- [ ] **Step 2: 修改轮询间隔从 200ms 改为 5s**
+- [ ] **Step 2: 修改轮询间隔**
 
-将 `startPolling()` 中的 sleep 从 200ms 改为 5s：
+将 `startPolling()` 改为动态间隔：
 
 ```swift
     private func startPolling() {
-        appendLog("startPolling: Starting event-driven polling with 5s fallback\n")
+        appendLog("startPolling: Starting event-driven polling with dynamic fallback\n")
         pollingTask = Task.detached { [weak self] in
             while !Task.isCancelled {
-                // 5s fallback polling for Darwin Notification loss cases
+                // Dynamic interval: 1s for waitingForApproval, 5s otherwise
+                let interval = self?.hasWaitingForApproval ?? false ? 1.0 : 5.0
                 self?.pollStateFiles()
-                try? await Task.sleep(for: .seconds(5))
+                try? await Task.sleep(for: .seconds(interval))
             }
             self?.appendLog("polling: Task cancelled\n")
         }
     }
 ```
 
-- [ ] **Step 3: 在 stop() 中清除回调**
+- [ ] **Step 3: 添加 Notification.Name 定义**
 
-在 `stop()` 方法中添加：
+在 `boringNotch/AI/AIManager.swift` 中发送通知：
+
+```swift
+extension Notification.Name {
+    static let AIWaitingForApprovalChanged = Notification.Name("AIWaitingForApprovalChanged")
+}
+```
+
+在 `updateCoordinator()` 中发送：
+
+```swift
+    private func updateCoordinator() {
+        // ... existing code ...
+        
+        // Notify polling speed change if waitingForApproval state changed
+        let hasApproval = hasAnyPendingApproval
+        NotificationCenter.default.post(name: .AIWaitingForApprovalChanged, object: nil)
+    }
+```
+
+- [ ] **Step 4: 在 stop() 中清除回调**
 
 ```swift
     func stop() {
@@ -205,16 +243,16 @@ git commit -m "feat(xpc-client): add stateupdate Darwin Notification listener"
     }
 ```
 
-- [ ] **Step 4: 验证编译**
+- [ ] **Step 5: 验证编译**
 
 运行：`xcodebuild -scheme boringNotch -configuration Debug build 2>&1 | tail -20`
 预期：BUILD SUCCEEDED
 
-- [ ] **Step 5: 提交**
+- [ ] **Step 6: 提交**
 
 ```bash
-git add boringNotch/AI/AIHookServer.swift
-git commit -m "feat(ai-server): event-driven polling with 5s fallback"
+git add boringNotch/AI/AIHookServer.swift boringNotch/AI/AIManager.swift
+git commit -m "feat(ai-server): dynamic polling speed 1s for waitingForApproval"
 ```
 
 ---
@@ -256,21 +294,35 @@ git commit -m "feat(ai-state): add subagentCount field"
 
 ---
 
-## Task 5: AIManager SubagentStart/Stop 处理
+## Task 5: AIManager SubagentStart/Stop + CwdChanged 处理（移到 toPhase() 之前）
 
 **Files:**
 - Modify: `boringNotch/AI/AIManager.swift`
 
-- [ ] **Step 1: 在 handleHookEvent 开头添加 subagent 事件处理**
+**重要：** SubagentStart/Stop 和 CwdChanged 处理必须在 `let phase = event.toPhase()` 之前，因为这些事件不触发 phase 变换，只更新字段。
 
-在 `handleHookEvent` 方法的开头（约 152 行），在其他处理前添加：
+- [ ] **Step 1: 重构 handleHookEvent 开头**
+
+将 `handleHookEvent` 方法的开头改为：
 
 ```swift
     private func handleHookEvent(_ event: AIHookEvent) {
         let sessionId = event.sessionId
-        let phase = event.toPhase()
         
-        // Handle SubagentStart/SubagentStop: only update count, no phase change
+        // ===== Early-return events (no phase change) =====
+        // Must process BEFORE toPhase() call
+        
+        // Handle CwdChanged: only update cwd, no phase change
+        if event.status == "cwd_changed" || event.event == "CwdChanged" {
+            let effectiveSessionId = !sessionId.isEmpty ? sessionId : "unknown"
+            if let newCwd = event.cwd, !newCwd.isEmpty {
+                sessions[effectiveSessionId]?.cwd = newCwd
+                appendAILog("handleHookEvent: CwdChanged for \(effectiveSessionId.prefix(8)), new cwd=\(newCwd)\n")
+            }
+            return  // No phase change, no updateCoordinator
+        }
+        
+        // Handle SubagentStart: only increment count, no phase change
         if event.status == "subagent_active" || event.event == "SubagentStart" {
             let effectiveSessionId = !sessionId.isEmpty ? sessionId : "unknown"
             if sessions[effectiveSessionId] == nil {
@@ -278,28 +330,33 @@ git commit -m "feat(ai-state): add subagentCount field"
                 sessions[effectiveSessionId] = AISessionState(
                     id: effectiveSessionId,
                     phase: .processing,
+                    cwd: event.cwd,  // Fill cwd from event
                     lastUpdated: Date(),
                     subagentCount: 1
                 )
-                appendAILog("handleHookEvent: Created session for SubagentStart \(effectiveSessionId.prefix(8))\n")
+                appendAILog("handleHookEvent: Created session for SubagentStart \(effectiveSessionId.prefix(8)) cwd=\(event.cwd ?? "nil")\n")
             } else {
                 sessions[effectiveSessionId]?.subagentCount += 1
                 appendAILog("handleHookEvent: SubagentStart for \(effectiveSessionId.prefix(8)), count=\(sessions[effectiveSessionId]?.subagentCount ?? 0)\n")
             }
-            // Don't change phase, don't call updateCoordinator
-            return
+            return  // No phase change
         }
         
+        // Handle SubagentStop: only decrement count, no phase change
         if event.status == "subagent_done" || event.event == "SubagentStop" {
             let effectiveSessionId = !sessionId.isEmpty ? sessionId : "unknown"
             let currentCount = sessions[effectiveSessionId]?.subagentCount ?? 0
             sessions[effectiveSessionId]?.subagentCount = max(0, currentCount - 1)
             appendAILog("handleHookEvent: SubagentStop for \(effectiveSessionId.prefix(8)), count=\(sessions[effectiveSessionId]?.subagentCount ?? 0)\n")
-            // Don't change phase, don't call updateCoordinator
-            return
+            return  // No phase change
         }
         
-        // ... rest of handleHookEvent unchanged
+        // ===== Phase-transforming events =====
+        // Now call toPhase() for other events
+        
+        let phase = event.toPhase()
+        
+        // ... rest of handleHookEvent unchanged (SessionEnd handling, etc.)
     }
 ```
 
@@ -321,7 +378,7 @@ git commit -m "feat(ai-state): add subagentCount field"
 
 ```bash
 git add boringNotch/AI/AIManager.swift
-git commit -m "feat(ai-manager): handle SubagentStart/Stop for subagentCount tracking"
+git commit -m "feat(ai-manager): process CwdChanged/Subagent before toPhase with cwd fill"
 ```
 
 ---
@@ -366,88 +423,45 @@ git commit -m "feat(ai-manager): add timeout rules for toolFailed and error stat
 
 ---
 
-## Task 7: AIManager CwdChanged 处理
+## Task 7: AIHookEvent toPhase 验证（Phase 1 Task 6 已实现）
 
 **Files:**
-- Modify: `boringNotch/AI/AIManager.swift`
+- Verify: `boringNotch/AI/Models/AIHookEvent.swift`
 
-- [ ] **Step 1: 在 handleHookEvent 中处理 CwdChanged**
+**说明：** 此 Task 仅验证 Phase 1 Task 6 的改动是否正确，无需重新实现。
 
-在 `handleHookEvent` 中处理 `cwd_changed` status：
+- [ ] **Step 1: 验证 toPhase 已包含新状态**
+
+读取 `AIHookEvent.swift` 确认以下 case 存在：
 
 ```swift
-        // Handle CwdChanged: only update cwd, no phase change
-        if event.status == "cwd_changed" || event.event == "CwdChanged" {
-            let effectiveSessionId = !sessionId.isEmpty ? sessionId : "unknown"
-            if let newCwd = event.cwd, !newCwd.isEmpty {
-                sessions[effectiveSessionId]?.cwd = newCwd
-                appendAILog("handleHookEvent: CwdChanged for \(effectiveSessionId.prefix(8)), new cwd=\(newCwd)\n")
-            }
-            // Don't change phase
-            return
-        }
+case "tool_failed":
+    return .toolFailed
+case "error":
+    return .error
+case "subagent_active", "subagent_done":
+    return .processing  // Keep current phase, will handle in AIManager
+case "cwd_changed":
+    return .processing  // No phase change, will handle in AIManager before toPhase()
 ```
 
-将此代码放在 subagent 处理代码块之后，其他事件处理之前。
+如果缺失，说明 Phase 1 Task 6 未完成，需先完成 Phase 1。
 
 - [ ] **Step 2: 验证编译**
 
 运行：`xcodebuild -scheme boringNotch -configuration Debug build 2>&1 | tail -20`
 预期：BUILD SUCCEEDED
 
-- [ ] **Step 3: 提交**
-
-```bash
-git add boringNotch/AI/AIManager.swift
-git commit -m "feat(ai-manager): handle CwdChanged event"
-```
-
 ---
 
-## Task 8: AIHookEvent toPhase 新状态处理
-
-**Files:**
-- Modify: `boringNotch/AI/Models/AIHookEvent.swift`
-
-- [ ] **Step 1: 确认 toPhase 已包含新状态**
-
-确认 Phase 1 Task 7 的改动已包含：
-
-```swift
-        case "tool_failed":
-            return .toolFailed
-        case "error":
-            return .error
-        case "subagent_active", "subagent_done":
-            return .processing  // Keep current phase, will handle in AIManager
-        case "cwd_changed":
-            return .processing  // No phase change, just update cwd
-```
-
-如果缺失，添加上述 case。
-
-- [ ] **Step 2: 验证编译**
-
-运行：`xcodebuild -scheme boringNotch -configuration Debug build 2>&1 | tail -20`
-预期：BUILD SUCCEEDED
-
-- [ ] **Step 3: 提交**
-
-```bash
-git add boringNotch/AI/Models/AIHookEvent.swift
-git commit -m "feat(ai-event): ensure all new statuses handled in toPhase"
-```
-
----
-
-## Task 9: AISessionPhase needsAttention 和 isActive 更新
+## Task 8: AISessionPhase needsAttention 和 isActive 更新（必须包含 toolFailed/error）
 
 **Files:**
 - Modify: `boringNotch/AI/Models/AISessionState.swift`
 
-- [ ] **Step 1: 更新 needsAttention 属性**
+**重要：** isActive 必须包含 .toolFailed 和 .error，否则 Notch 会隐藏 AI 指示器。
 
-将 `needsAttention` 从只检查 `waitingForApproval` 改为也检查错误状态：
+- [ ] **Step 1: 更新 needsAttention 属性**
 
 ```swift
     var needsAttention: Bool {
@@ -457,11 +471,9 @@ git commit -m "feat(ai-event): ensure all new statuses handled in toPhase"
 
 - [ ] **Step 2: 更新 isActive 属性**
 
-确认 `isActive` 包含新状态（当前已包含，无需修改）：
-
 ```swift
     var isActive: Bool {
-        self == .processing || self == .runningTool || self == .compacting
+        self == .processing || self == .runningTool || self == .compacting || self == .toolFailed || self == .error
     }
 ```
 
@@ -474,12 +486,12 @@ git commit -m "feat(ai-event): ensure all new statuses handled in toPhase"
 
 ```bash
 git add boringNotch/AI/Models/AISessionState.swift
-git commit -m "feat(ai-phase): update needsAttention for error states"
+git commit -m "feat(ai-phase): include toolFailed/error in isActive to prevent Notch hiding"
 ```
 
 ---
 
-## Task 10: 验证 Phase 2 功能
+## Task 9: 验证 Phase 2 功能
 
 **Files:**
 - Test: 手动测试
