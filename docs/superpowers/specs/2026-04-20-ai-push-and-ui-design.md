@@ -122,7 +122,7 @@ Hook 发送 SessionEnd → XPC Helper 写入状态文件 → 主 App 轮询读�
 
 ### Hook 脚本改动
 
-SubagentStart/SubagentStop 映射为 `processing`（而非 waiting_for_input），但不触发状态转换：
+SubagentStart/SubagentStop 映射为专用标记 `subagent_active`/`subagent_done`，不触发状态转换：
 ```python
 status_map = {
     "SubagentStart": "subagent_active",  # 新增：仅计数标记
@@ -159,13 +159,13 @@ if phase == .ended {
 
 | 场景 | 处理规则 |
 |------|----------|
-| SubagentStart 到达但无对应 session | 创建新 session，phase=processing，subagentCount=1 |
+| SubagentStart 到达但无对应 session | 创建新 session，phase=processing，subagentCount=1（防御性处理，正常流程 SessionStart 应先到达） |
 | SubagentStop 到达但 subagentCount 已为 0 | 不减为负数，忽略该事件 |
 | SessionEnd 时 subagentCount > 0 | 强制归零，正常清理 session |
 
 ---
 
-## 三.5、完整事件处理矩阵
+## 四、完整事件处理矩阵
 
 ### Claude Code Hook 事件全量映射
 
@@ -229,7 +229,7 @@ if event.status == "subagent_done" || event.event == "SubagentStop" {
 
 ---
 
-## 四、UI 展示设计
+## 五、UI 展示设计
 
 ### 紧凑态（收起态）
 
@@ -312,7 +312,7 @@ if event.status == "subagent_done" || event.event == "SubagentStop" {
 
 ---
 
-## 五、关键文件路径
+## 六、关键文件路径
 
 | 文件 | 作用 |
 |------|------|
@@ -330,7 +330,7 @@ if event.status == "subagent_done" || event.event == "SubagentStop" {
 
 ---
 
-## 六、验证方法
+## 七、验证方法
 
 ### Phase 1 验证
 
@@ -364,7 +364,7 @@ if event.status == "subagent_done" || event.event == "SubagentStop" {
 
 ---
 
-## 七、已知限制
+## 八、已知限制
 
 - Darwin Notification 无 payload，需通过文件扫描 + hash 对比确定变化文件
 - Phase 1 的 200ms 轮询延迟仍存在（Phase 2 解决）
@@ -396,4 +396,5 @@ AIManager 的 `convertStaleProcessingToIdle` 定时检查各状态的持续时�
 | running_tool | 120 秒 | 工具执行可能很长（如 Bash 命令） |
 | compacting | 60 秒 | 压缩上下文需要一定时间 |
 | tool_failed | 10 秒 | 失败状态短暂展示后自动回退，避免长时间显示错误 |
+| error | 10 秒 | 错误状态短暂展示后自动回退，用户已注意到异常 |
 | waiting_for_approval | 不超时 | 等待用户决策，不应自动回退 |
