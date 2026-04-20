@@ -251,13 +251,13 @@ git commit -m "feat(ui): add toolFailed and error status animations"
 
 ---
 
-## Task 4: AISessionState 新增 toolInput 字段 + AIManager PreToolUse 存储
+## Task 4: AISessionState 新增 toolInput 字段 + AIManager PreToolUse 存储 + PostToolUse 清理
 
 **Files:**
 - Modify: `boringNotch/AI/Models/AISessionState.swift`
 - Modify: `boringNotch/AI/AIManager.swift`
 
-**重要：** 当前 toolInput 只在 permissionRequest 时存储，非审批状态无法获取。需要新增字段并在 PreToolUse 时存储。
+**重要：** 当前 toolInput 只在 permissionRequest 时存储，非审批状态无法获取。需要新增字段并在 PreToolUse 时存储。同时在 PostToolUse 时清理，避免工具执行完毕后仍显示上一个工具的输入信息。
 
 - [ ] **Step 1: AISessionState 新增 toolInput 字段**
 
@@ -276,18 +276,25 @@ struct AISessionState: Identifiable {
 }
 ```
 
-- [ ] **Step 2: AIManager 在 PreToolUse 时存储 toolInput**
+- [ ] **Step 2: AIManager 在 PreToolUse 时存储 toolInput，在 PostToolUse 时清理**
 
-在 `handleHookEvent` 的 PreToolUse 处理中添加：
+在 `handleHookEvent` 中添加存储和清理逻辑：
 
 ```swift
         // Store toolInput on PreToolUse for display
         if event.event == "PreToolUse", let toolInput = event.toolInput {
             sessions[effectiveSessionId]?.toolInput = toolInput
         }
+        
+        // Clear toolInput after tool execution completes (but keep on failure for display)
+        if event.event == "PostToolUse" {
+            sessions[effectiveSessionId]?.toolInput = nil
+        }
 ```
 
 位置：在 `session.currentTool = event.tool` 设置之后。
+
+**说明：** PostToolUseFailure 不清理 toolInput，保留以便 ToolInputFormatter 显示 `"Bash Failed"` 等错误信息。进入 processing 状态后，ToolInputFormatter 检测到 `input == nil` 会显示 `"Thinking..."`。
 
 - [ ] **Step 3: 验证编译**
 
@@ -298,7 +305,7 @@ struct AISessionState: Identifiable {
 
 ```bash
 git add boringNotch/AI/Models/AISessionState.swift boringNotch/AI/AIManager.swift
-git commit -m "feat(ai-state): add toolInput field and store on PreToolUse"
+git commit -m "feat(ai-state): add toolInput field with store/clear lifecycle"
 ```
 
 ---
@@ -634,6 +641,7 @@ struct SessionCountBadge: View {
                 }
                 
                 // Session count badge (only when multiple sessions)
+                // Note: DualLiveActivity shares space with music, use smaller badge (0.35x vs 1x in AIOnly)
                 if aiManager.sessions.count > 1 {
                     SessionCountBadge(count: aiManager.sessions.count, size: iconSize * 0.35)
                         .offset(x: iconSize * 0.12, y: -iconSize * 0.08)
@@ -641,6 +649,8 @@ struct SessionCountBadge: View {
             }
             .frame(width: iconSize, height: iconSize)
 ```
+
+**说明：** DualLiveActivity 中角标尺寸更小（`iconSize * 0.35` vs `iconSize`），因为 Dual 模式下 AI 图标与音乐播放器共享紧凑态空间，视觉空间更紧凑。AIOnlyLiveActivity 有更多空间可用完整尺寸角标。
 
 - [ ] **Step 4: 验证编译**
 

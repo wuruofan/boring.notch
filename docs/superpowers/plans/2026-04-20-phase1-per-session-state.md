@@ -375,30 +375,32 @@ git commit -m "feat(ai-server): multi-file polling with per-file hash dedup and 
                     await AIXPCClient.shared.cleanupStateFile(sessionId: sessionIdCopy)
                     // Clear hash entry to prevent memory leak
                     await MainActor.run {
-                        AIHookServer.shared?.clearHash(sessionId: sessionIdCopy)
+                        AIManager.sharedHookServer?.clearHash(sessionId: sessionIdCopy)
                     }
                 }
 ```
 
 具体改动位置：在 `updateCoordinator()` 调用前添加上述代码。
 
-**注意：** AIHookServer 需要 expose 为 shared instance 或通过 AIManager 持有引用。当前 AIManager 中 hookServer 是 private property，可以改为：
+- [ ] **Step 3: AIManager 添加 sharedHookServer 属性**
+
+在 AIManager 中添加 expose 属性：
 
 ```swift
     private var hookServer: AIHookServer?
     
-    // Expose for cleanup
+    // Expose for cleanup after SessionEnd
     static var sharedHookServer: AIHookServer? {
         AIManager.shared.hookServer
     }
 ```
 
-- [ ] **Step 3: 验证编译**
+- [ ] **Step 4: 验证编译**
 
 运行：`xcodebuild -scheme boringNotch -configuration Debug build 2>&1 | tail -20`
 预期：BUILD SUCCEEDED
 
-- [ ] **Step 4: 提交**
+- [ ] **Step 5: 提交**
 
 ```bash
 git add boringNotch/AI/AIManager.swift boringNotch/AI/AIHookServer.swift

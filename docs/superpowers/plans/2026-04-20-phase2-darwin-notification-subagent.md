@@ -159,12 +159,16 @@ git commit -m "feat(xpc-client): add stateupdate Darwin Notification listener"
 
 **说明：** waitingForApproval 状态对用户体验影响大，需要更短的兜底轮询间隔（1s 而非 5s）。
 
-- [ ] **Step 1: 添加动态轮询间隔**
+- [ ] **Step 1: 添加动态轮询间隔属性**
 
-在 `AIHookServer` 中添加状态检测和动态间隔：
+在 `AIHookServer` 中添加状态检测属性和 Task 存储：
 
 ```swift
-    private var hasWaitingForApproval: Bool = false
+    // Thread-safe storage for notification observer
+    private var notificationObserverTask: Task<Void, Never>?
+    
+    // @MainActor isolated state for polling speed
+    @MainActor private var hasWaitingForApproval: Bool = false
     
     func start() {
         appendLog("AIHookServer.start() - path=\(Self.stateFileBasePath)\n")
@@ -175,7 +179,8 @@ git commit -m "feat(xpc-client): add stateupdate Darwin Notification listener"
         }
         
         // Observe AIManager for waitingForApproval state changes
-        Task { @MainActor in
+        // Store Task for cleanup in stop()
+        notificationObserverTask = Task { @MainActor [weak self] in
             for await _ in NotificationCenter.default.notifications(named: .AIWaitingForApprovalChanged) {
                 self?.updatePollingSpeed()
             }
@@ -184,6 +189,7 @@ git commit -m "feat(xpc-client): add stateupdate Darwin Notification listener"
         startPolling()
     }
     
+    @MainActor
     private func updatePollingSpeed() {
         // Check if any session is waitingForApproval
         hasWaitingForApproval = AIManager.shared.hasAnyPendingApproval
@@ -191,17 +197,19 @@ git commit -m "feat(xpc-client): add stateupdate Darwin Notification listener"
     }
 ```
 
-- [ ] **Step 2: 修改轮询间隔**
+- [ ] **Step 2: 修改轮询间隔（线程安全读取）**
 
-将 `startPolling()` 改为动态间隔：
+将 `startPolling()` 改为动态间隔，使用 `await MainActor.run` 读取：
 
 ```swift
     private func startPolling() {
         appendLog("startPolling: Starting event-driven polling with dynamic fallback\n")
         pollingTask = Task.detached { [weak self] in
             while !Task.isCancelled {
-                // Dynamic interval: 1s for waitingForApproval, 5s otherwise
-                let interval = self?.hasWaitingForApproval ?? false ? 1.0 : 5.0
+                // Thread-safe read: use await MainActor.run to read @MainActor isolated property
+                let interval = await MainActor.run {
+                    self?.hasWaitingForApproval ?? false ? 1.0 : 5.0
+                }
                 self?.pollStateFiles()
                 try? await Task.sleep(for: .seconds(interval))
             }
@@ -209,6 +217,8 @@ git commit -m "feat(xpc-client): add stateupdate Darwin Notification listener"
         }
     }
 ```
+
+**重要说明：** `hasWaitingForApproval` 标记为 `@MainActor`，防止数据竞争。`Task.detached` 中的轮询需要用 `await MainActor.run` 读取，确保线程安全。
 
 - [ ] **Step 3: 添加 Notification.Name 定义**
 
@@ -232,14 +242,16 @@ extension Notification.Name {
     }
 ```
 
-- [ ] **Step 4: 在 stop() 中清除回调**
+- [ ] **Step 4: 在 stop() 中清除回调并取消 Task**
 
 ```swift
     func stop() {
         pollingTask?.cancel()
         pollingTask = nil
+        notificationObserverTask?.cancel()  // Cancel notification observer to prevent leak
+        notificationObserverTask = nil
         AIXPCClient.shared.onStateUpdateDetected = nil
-        appendLog("AIHookServer.stop() - polling stopped, callback cleared\n")
+        appendLog("AIHookServer.stop() - polling stopped, tasks cancelled, callback cleared\n")
     }
 ```
 
@@ -317,6 +329,7 @@ git commit -m "feat(ai-state): add subagentCount field"
             let effectiveSessionId = !sessionId.isEmpty ? sessionId : "unknown"
             if let newCwd = event.cwd, !newCwd.isEmpty {
                 sessions[effectiveSessionId]?.cwd = newCwd
+                objectWillChange.send()  // Trigger SwiftUI update for cwd display
                 appendAILog("handleHookEvent: CwdChanged for \(effectiveSessionId.prefix(8)), new cwd=\(newCwd)\n")
             }
             return  // No phase change, no updateCoordinator
@@ -337,6 +350,7 @@ git commit -m "feat(ai-state): add subagentCount field"
                 appendAILog("handleHookEvent: Created session for SubagentStart \(effectiveSessionId.prefix(8)) cwd=\(event.cwd ?? "nil")\n")
             } else {
                 sessions[effectiveSessionId]?.subagentCount += 1
+                objectWillChange.send()  // Trigger SwiftUI update for [n] badge
                 appendAILog("handleHookEvent: SubagentStart for \(effectiveSessionId.prefix(8)), count=\(sessions[effectiveSessionId]?.subagentCount ?? 0)\n")
             }
             return  // No phase change
@@ -347,6 +361,7 @@ git commit -m "feat(ai-state): add subagentCount field"
             let effectiveSessionId = !sessionId.isEmpty ? sessionId : "unknown"
             let currentCount = sessions[effectiveSessionId]?.subagentCount ?? 0
             sessions[effectiveSessionId]?.subagentCount = max(0, currentCount - 1)
+            objectWillChange.send()  // Trigger SwiftUI update for [n] badge
             appendAILog("handleHookEvent: SubagentStop for \(effectiveSessionId.prefix(8)), count=\(sessions[effectiveSessionId]?.subagentCount ?? 0)\n")
             return  // No phase change
         }
@@ -359,6 +374,8 @@ git commit -m "feat(ai-state): add subagentCount field"
         // ... rest of handleHookEvent unchanged (SessionEnd handling, etc.)
     }
 ```
+
+**重要说明：** `sessions[id]?.subagentCount += 1` 这种字典 value 修改不会触发 @Published 的 objectWillChange（因为字典引用未变）。必须手动调用 `objectWillChange.send()` 才能通知 SwiftUI 更新 UI，否则 `[n]` 角标不会显示。对于创建新 session（字典赋值），@Published 会自动触发，无需额外调用。
 
 - [ ] **Step 2: 在 SessionEnd 处理中强制归零 subagentCount**
 
@@ -454,40 +471,35 @@ case "cwd_changed":
 
 ---
 
-## Task 8: AISessionPhase needsAttention 和 isActive 更新（必须包含 toolFailed/error）
+## Task 8: AISessionPhase needsAttention 和 isActive 验证（Phase 1 Task 6 已实现）
 
 **Files:**
-- Modify: `boringNotch/AI/Models/AISessionState.swift`
+- Verify: `boringNotch/AI/Models/AISessionState.swift`
+
+**说明：** 此 Task 仅验证 Phase 1 Task 6 的改动是否正确，无需重新实现。Phase 1 Task 6 已在添加枚举值时同步更新了 needsAttention 和 isActive 属性。
 
 **重要：** isActive 必须包含 .toolFailed 和 .error，否则 Notch 会隐藏 AI 指示器。
 
-- [ ] **Step 1: 更新 needsAttention 属性**
+- [ ] **Step 1: 验证 needsAttention 和 isActive 属性**
+
+读取 `AISessionState.swift` 确认以下代码存在：
 
 ```swift
     var needsAttention: Bool {
         self == .waitingForApproval || self == .toolFailed || self == .error
     }
-```
 
-- [ ] **Step 2: 更新 isActive 属性**
-
-```swift
     var isActive: Bool {
         self == .processing || self == .runningTool || self == .compacting || self == .toolFailed || self == .error
     }
 ```
 
-- [ ] **Step 3: 验证编译**
+如果缺失，说明 Phase 1 Task 6 未完成，需先完成 Phase 1。
+
+- [ ] **Step 2: 验证编译**
 
 运行：`xcodebuild -scheme boringNotch -configuration Debug build 2>&1 | tail -20`
 预期：BUILD SUCCEEDED
-
-- [ ] **Step 4: 提交**
-
-```bash
-git add boringNotch/AI/Models/AISessionState.swift
-git commit -m "feat(ai-phase): include toolFailed/error in isActive to prevent Notch hiding"
-```
 
 ---
 
