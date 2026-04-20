@@ -332,6 +332,15 @@ class AIHookServerCore {
             }()
 
             NSLog("AIHookServerCore: Wrote event \(event) inode: before=\(beforeInode ?? -1) after=\(afterInode ?? -1) changed=\(beforeInode != afterInode)")
+
+            // Send Darwin Notification to notify main app immediately
+            let notificationName = "com.boringnotch.ai.stateupdate" as CFString
+            CFNotificationCenterPostNotification(
+                CFNotificationCenterGetDarwinNotifyCenter(),
+                CFNotificationName(notificationName),
+                nil, nil, true
+            )
+            NSLog("AIHookServerCore: Sent stateupdate notification for \(sessionId.prefix(8))")
         }
 
         // Cache tool_use_id from PreToolUse
