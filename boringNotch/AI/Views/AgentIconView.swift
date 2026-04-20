@@ -190,8 +190,8 @@ struct SleepIcon: View {
     @State private var zOffset: CGFloat = 0
     @State private var opacity: Double = 0.4
 
-    // Default to brighter purple for better visibility on dark background
-    init(size: CGFloat = 14, color: Color = Color(red: 0.75, green: 0.55, blue: 0.95).opacity(0.9)) {
+    // Default to white.opacity(0.4) for better visibility on dark background
+    init(size: CGFloat = 14, color: Color = .white.opacity(0.4)) {
         self.size = size
         self.color = color
     }
@@ -236,6 +236,75 @@ struct SleepIcon: View {
                 opacity = 0.7
             }
         }
+    }
+}
+
+// MARK: - Tool Failed Indicator Icon (Red Exclamation Mark)
+struct FailedIndicatorIcon: View {
+    let size: CGFloat
+
+    init(size: CGFloat = 14) {
+        self.size = size
+    }
+
+    private let pixels: [(CGFloat, CGFloat)] = [
+        (13, 3),   // Top dot
+        (13, 7), (13, 11), (13, 15),  // Vertical bar
+        (9, 19), (13, 19), (17, 19),   // Bottom dot row
+        (13, 23)   // Bottom dot
+    ]
+
+    var body: some View {
+        Canvas { context, canvasSize in
+            let scale = size / 30.0
+            let pixelSize: CGFloat = 4 * scale
+
+            for (x, y) in pixels {
+                let rect = CGRect(
+                    x: x * scale - pixelSize / 2,
+                    y: y * scale - pixelSize / 2,
+                    width: pixelSize,
+                    height: pixelSize
+                )
+                context.fill(Path(rect), with: .color(.red))
+            }
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+// MARK: - Error Indicator Icon (Red X Symbol)
+struct ErrorIndicatorIcon: View {
+    let size: CGFloat
+
+    init(size: CGFloat = 14) {
+        self.size = size
+    }
+
+    private let pixels: [(CGFloat, CGFloat)] = [
+        // X shape - diagonal lines
+        (7, 7), (11, 11),  // Top-left diagonal
+        (15, 15), (19, 19), (23, 23),  // Center diagonal
+        (23, 7), (19, 11),  // Top-right diagonal
+        (7, 23), (11, 19)   // Bottom-left diagonal
+    ]
+
+    var body: some View {
+        Canvas { context, canvasSize in
+            let scale = size / 30.0
+            let pixelSize: CGFloat = 4 * scale
+
+            for (x, y) in pixels {
+                let rect = CGRect(
+                    x: x * scale - pixelSize / 2,
+                    y: y * scale - pixelSize / 2,
+                    width: pixelSize,
+                    height: pixelSize
+                )
+                context.fill(Path(rect), with: .color(.red))
+            }
+        }
+        .frame(width: size, height: size)
     }
 }
 
@@ -336,17 +405,12 @@ struct SessionStatusIcon: View {
             PermissionIndicatorIcon(size: size, color: claudeOrange)
         case .waitingForInput:
             AgentIconView(size: size, animateLegs: false)  // Static crab (ready for input)
+        case .toolFailed:
+            FailedIndicatorIcon(size: size)
+        case .error:
+            ErrorIndicatorIcon(size: size)
         case .idle, .ended, .stopPending:
             SleepingCrabIcon(size: size, crabColor: claudeOrange.opacity(0.7))  // Crab + purple zZ
-        case .toolFailed, .error:
-            // Show crab with red error badge
-            ZStack(alignment: .topLeading) {
-                AgentIconView(size: size, animateLegs: false)
-                Image(systemName: "exclamationmark.circle.fill")
-                    .font(.system(size: size * 0.4))
-                    .foregroundColor(.red)
-                    .offset(x: size * 0.6, y: -size * 0.1)
-            }
         }
     }
 }
