@@ -27,6 +27,7 @@ class AIHookServer {
 
     private var pollingTask: Task<Void, Never>?
     private var lastHashes: [String: String] = [:]  // sessionId -> hash
+    private let hashQueue = DispatchQueue(label: "com.boringnotch.hashQueue")
 
     // MARK: - Helper
 
@@ -63,7 +64,7 @@ class AIHookServer {
 
     /// Clear hash entry for a session (called after cleanup)
     func clearHash(sessionId: String) {
-        lastHashes.removeValue(forKey: sessionId)
+        hashQueue.async { self.lastHashes.removeValue(forKey: sessionId) }
         appendLog("clearHash: Removed hash for \(sessionId)\n")
     }
 
@@ -137,8 +138,9 @@ class AIHookServer {
 
         // Per-file hash deduplication
         let contentHash = data.base64EncodedString()
-        if lastHashes[sessionId] == contentHash { return }
-        lastHashes[sessionId] = contentHash
+        let existingHash = hashQueue.sync { lastHashes[sessionId] }
+        if existingHash == contentHash { return }
+        hashQueue.async { self.lastHashes[sessionId] = contentHash }
 
         appendLog("processStateFileWithDedup: New data for \(sessionId), processing\n")
         processStateFile(data: data)
@@ -169,7 +171,7 @@ class AIHookServer {
                 let sessionId = fileName
                     .replacingOccurrences(of: "boringnotch-ai-state-", with: "")
                     .replacingOccurrences(of: ".json", with: "")
-                lastHashes.removeValue(forKey: sessionId)
+                hashQueue.async { self.lastHashes.removeValue(forKey: sessionId) }
             }
         }
     }

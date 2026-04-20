@@ -185,10 +185,8 @@ class AIManager: ObservableObject {
                 Task {
                     try? await Task.sleep(for: .seconds(2))
                     await AIXPCClient.shared.cleanupStateFile(sessionId: sessionIdCopy)
-                    // Clear hash entry to prevent memory leak
-                    await MainActor.run {
-                        AIManager.sharedHookServer?.clearHash(sessionId: sessionIdCopy)
-                    }
+                    // Clear hash entry to prevent memory leak (now thread-safe)
+                    AIManager.sharedHookServer?.clearHash(sessionId: sessionIdCopy)
                 }
 
                 if activeSessionId == sessionId {
