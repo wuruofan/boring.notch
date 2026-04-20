@@ -137,13 +137,20 @@ struct AIHookInstaller {
             ("UserPromptSubmit", withoutMatcher),
             ("PreToolUse", withMatcher),
             ("PostToolUse", withMatcher),
+            ("PostToolUseFailure", withMatcher),
             ("PermissionRequest", withMatcherAndTimeout),
-            ("Notification", withMatcher),
+            ("PermissionDenied", withoutMatcher),
             ("Stop", withoutMatcher),
+            ("StopFailure", withoutMatcher),
+            ("SubagentStart", withoutMatcher),
             ("SubagentStop", withoutMatcher),
             ("SessionStart", withoutMatcher),
             ("SessionEnd", withoutMatcher),
             ("PreCompact", preCompactConfig),
+            ("PostCompact", withoutMatcher),
+            ("CwdChanged", withoutMatcher),
+            ("Elicitation", withMatcherAndTimeout),
+            ("Notification", withMatcher),
         ]
 
         for (event, config) in hookEvents {
@@ -307,12 +314,19 @@ struct AIHookInstaller {
                 "UserPromptSubmit": "processing",
                 "PreToolUse": "running_tool",
                 "PostToolUse": "processing",
+                "PostToolUseFailure": "tool_failed",
                 "PermissionRequest": "waiting_for_approval",
-                "Stop": "stop_pending",  # Special: Swift will decide based on idle_prompt timing
-                "SubagentStop": "waiting_for_input",
+                "PermissionDenied": "processing",
+                "Stop": "stop_pending",
+                "StopFailure": "error",
+                "SubagentStart": "subagent_active",
+                "SubagentStop": "subagent_done",
                 "SessionStart": "waiting_for_input",
                 "SessionEnd": "ended",
                 "PreCompact": "compacting",
+                "PostCompact": "processing",
+                "CwdChanged": "cwd_changed",
+                "Elicitation": "waiting_for_approval",
             }
 
             notification_type = input_data.get("notification_type", "")
