@@ -30,7 +30,7 @@ struct AIStatusAnimationView: View {
 
         case .idle, .ended, .stopPending:
             // ESC interrupt or sleep - show white zZ
-            SleepIcon(size: size, color: .white.opacity(0.4))
+            SleepIcon(size: size, color: .white.opacity(0.6))
         }
     }
 }

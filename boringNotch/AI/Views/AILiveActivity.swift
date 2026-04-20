@@ -32,7 +32,7 @@ struct DualLiveActivity: View {
                     SessionStatusIcon(phase: session.phase, size: iconSize)
                         .frame(width: iconSize, height: iconSize)
                 } else {
-                    SleepIcon(size: iconSize, color: .white.opacity(0.4))
+                    SleepIcon(size: iconSize, color: .white.opacity(0.6))
                         .frame(width: iconSize, height: iconSize)
                 }
 
@@ -136,7 +136,7 @@ struct AIOnlyLiveActivity: View {
                     SessionStatusIcon(phase: session.phase, size: iconSize)
                         .frame(width: iconSize, height: iconSize)
                 } else {
-                    SleepIcon(size: iconSize, color: .white.opacity(0.4))
+                    SleepIcon(size: iconSize, color: .white.opacity(0.6))
                         .frame(width: iconSize, height: iconSize)
                 }
 

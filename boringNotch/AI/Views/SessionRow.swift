@@ -94,7 +94,7 @@ struct SessionRow: View {
         case .error:
             ErrorIndicatorIcon(size: 16)
         case .idle, .ended, .stopPending:
-            SleepIcon(size: 16, color: .white.opacity(0.4))
+            SleepIcon(size: 16, color: .white.opacity(0.6))
         }
     }
 

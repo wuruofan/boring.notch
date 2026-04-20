@@ -190,8 +190,8 @@ struct SleepIcon: View {
     @State private var zOffset: CGFloat = 0
     @State private var opacity: Double = 0.4
 
-    // Default to white.opacity(0.4) for better visibility on dark background
-    init(size: CGFloat = 14, color: Color = .white.opacity(0.4)) {
+    // Default to white.opacity(0.6) for better visibility on dark background
+    init(size: CGFloat = 14, color: Color = .white.opacity(0.6)) {
         self.size = size
         self.color = color
     }
@@ -410,7 +410,7 @@ struct SessionStatusIcon: View {
         case .error:
             ErrorIndicatorIcon(size: size)
         case .idle, .ended, .stopPending:
-            SleepingCrabIcon(size: size, crabColor: claudeOrange.opacity(0.7))  // Crab + purple zZ
+            SleepingCrabIcon(size: size, crabColor: claudeOrange.opacity(0.7), sleepColor: .white.opacity(0.6))  // Crab + white zZ
         }
     }
 }
