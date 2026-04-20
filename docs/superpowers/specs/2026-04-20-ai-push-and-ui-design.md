@@ -200,6 +200,33 @@ if phase == .ended {
 | tool_failed | 红色感叹号 | 工具名（红色）+ "Failed" |
 | error | 红色错误图标 | "Error" + 错误类型 |
 
+### 特殊事件处理详解
+
+**CwdChanged 数据流**：
+```
+Hook stdin JSON 包含新 cwd → Hook 脚本传递 cwd 字段 → AIHookEvent 解码 cwd → AIManager 更新 session.cwd
+```
+改动点：
+1. Hook 脚本：从 stdin JSON 读取 `cwd` 字段并传递（当前已支持）
+2. AIHookEvent：确保 `cwd` 字段解码正确（当前已支持）
+3. AIManager：收到 CwdChanged 时更新 `sessions[sessionId]?.cwd`
+
+**SubagentStart/SubagentStop Swift 处理**：
+```swift
+// AIManager.handleHookEvent() 中
+if event.status == "subagent_active" || event.event == "SubagentStart" {
+    sessions[sessionId]?.subagentCount += 1
+    // 不调用 updateCoordinator()，不改变 phase
+    return
+}
+if event.status == "subagent_done" || event.event == "SubagentStop" {
+    sessions[sessionId]?.subagentCount = max(0, (sessions[sessionId]?.subagentCount ?? 0) - 1)
+    // 不调用 updateCoordinator()，不改变 phase
+    return
+}
+```
+关键点：识别 `subagent_active` 和 `subagent_done` status 值，做计数处理而非 phase 变更。
+
 ---
 
 ## 四、UI 展示设计
@@ -272,12 +299,16 @@ if phase == .ended {
 
 ### 状态优先级（紧凑态右侧）
 
-| 优先级 | 状态 | 右侧图标 |
-|--------|------|----------|
-| 1（最高） | Waiting for Approval | 琥珀色审批指示器 |
-| 2 | Processing | Spinner |
-| 3 | Waiting for Input | 绿色 Checkmark |
-| 4（最低） | Idle | Sleep 动画 |
+| 优先级 | 状态 | 右侧图标 | 说明 |
+|--------|------|----------|------|
+| 1（最高） | Waiting for Approval | 琥珀色审批指示器 | 需用户决策 |
+| 2 | Error | 红色错误图标 | API 错误需用户注意 |
+| 3 | Tool Failed | 红色感叹号 | 工具失败需用户注意 |
+| 4 | Processing / Running Tool / Compacting | Spinner / 工具图标 | 正常执行中 |
+| 5 | Waiting for Input | 绿色 Checkmark | 任务完成等待输入 |
+| 6（最低） | Idle | Sleep 动画 | 无任务 |
+
+**设计决策**：紧凑态仅展示最高优先级 session 的状态（通过 `highestPrioritySession` 计算），详细信息需查看展开态。Notch 空间有限，无法同时展示多个 session 的详细状态。
 
 ---
 
@@ -343,6 +374,7 @@ if phase == .ended {
 - **sessionId 特殊字符**：做 URL-safe base64 编码，防止文件名不安全
 - **Darwin Notification 丢通知**：保留 5 秒低频轮询兜底
 - **多事件快速覆盖**：同一 session 短时间内多个事件，中间状态可能被跳过（设计允许，最终状态正确）
+- **Elicitation 与 PermissionRequest 性质不同**：Elicitation 是 MCP 请求用户文本输入，PermissionRequest 是工具权限审批。短期映射为 waitingForApproval 可接受（MVP），长期需新增 .waitingForElicitation phase 并 UI 区分（输入框而非审批按钮）
 
 ### 异常场景处理策略
 
@@ -353,3 +385,15 @@ if phase == .ended {
 | Hook 脚本版本过旧 | AIHookInstaller 启动时比对版本，自动覆盖升级 |
 | Darwin Notification 丢失 | 5 秒低频轮询兜底扫描所有状态文件 |
 | 同一 session 事件风暴 | Hash dedup 保证只处理变化，中间状态跳过不影响最终正确性 |
+
+### 状态超时规则
+
+AIManager 的 `convertStaleProcessingToIdle` 定时检查各状态的持续时间，超过阈值后自动回退到 idle：
+
+| 状态 | 超时阈值 | 原因 |
+|------|----------|------|
+| processing | 15 秒 | 思考阶段不应过长 |
+| running_tool | 120 秒 | 工具执行可能很长（如 Bash 命令） |
+| compacting | 60 秒 | 压缩上下文需要一定时间 |
+| tool_failed | 10 秒 | 失败状态短暂展示后自动回退，避免长时间显示错误 |
+| waiting_for_approval | 不超时 | 等待用户决策，不应自动回退 |
