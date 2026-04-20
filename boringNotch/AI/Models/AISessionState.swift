@@ -43,6 +43,7 @@ struct AISessionState: Identifiable {
     var tty: String?
     var permissionRequest: AIPermissionRequest?
     var lastUpdated: Date
+    var subagentCount: Int = 0  // Track running subagents
 }
 
 struct AnyCodable: Codable, Equatable {
