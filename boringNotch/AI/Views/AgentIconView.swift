@@ -338,6 +338,15 @@ struct SessionStatusIcon: View {
             AgentIconView(size: size, animateLegs: false)  // Static crab (ready for input)
         case .idle, .ended, .stopPending:
             SleepingCrabIcon(size: size, crabColor: claudeOrange.opacity(0.7))  // Crab + purple zZ
+        case .toolFailed, .error:
+            // Show crab with red error badge
+            ZStack(alignment: .topLeading) {
+                AgentIconView(size: size, animateLegs: false)
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.system(size: size * 0.4))
+                    .foregroundColor(.red)
+                    .offset(x: size * 0.6, y: -size * 0.1)
+            }
         }
     }
 }

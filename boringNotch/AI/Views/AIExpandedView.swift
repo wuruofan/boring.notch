@@ -50,6 +50,8 @@ struct AIExpandedView: View {
         case .waitingForApproval: return "Needs approval"
         case .compacting: return "Compacting..."
         case .idle, .ended, .stopPending: return "Idle"
+        case .toolFailed: return "Tool failed"
+        case .error: return "Error"
         }
     }
 

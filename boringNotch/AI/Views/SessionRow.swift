@@ -15,7 +15,7 @@ struct SessionRow: View {
     }
 
     private var isIdle: Bool {
-        session.phase == .idle || session.phase == .ended || session.phase == .waitingForInput || session.phase == .stopPending
+        session.phase == .idle || session.phase == .ended || session.phase == .waitingForInput || session.phase == .stopPending || session.phase == .toolFailed || session.phase == .error
     }
 
     var body: some View {
@@ -84,6 +84,10 @@ struct SessionRow: View {
             return "Ended"
         case .stopPending:
             return "Stopping..."
+        case .toolFailed:
+            return "Tool failed"
+        case .error:
+            return "Error"
         }
     }
 
@@ -116,6 +120,10 @@ struct SessionRow: View {
             ReadyForInputIndicatorIcon(size: 16, color: .green)
         case .idle, .ended, .stopPending:
             SleepIcon(size: 16)  // Uses purple by default
+        case .toolFailed, .error:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
+                .foregroundColor(.red)
         }
     }
 

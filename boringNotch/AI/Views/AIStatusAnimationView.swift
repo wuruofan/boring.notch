@@ -25,6 +25,12 @@ struct AIStatusAnimationView: View {
         case .idle, .ended, .stopPending:
             // ESC interrupt or sleep - show purple zZ
             SleepIcon(size: size)  // Uses purple by default now
+
+        case .toolFailed, .error:
+            // Tool execution failed or API error - show red warning icon
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: size * 0.8))
+                .foregroundColor(.red)
         }
     }
 }

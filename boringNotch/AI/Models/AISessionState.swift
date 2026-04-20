@@ -9,15 +9,18 @@ enum AISessionPhase: String, Codable {
     case compacting
     case ended
     case stopPending = "stop_pending"  // Special: awaiting Swift-side decision
+    case toolFailed = "tool_failed"    // Tool execution failed
+    case error                         // API error or catastrophic failure
 
     /// Only waiting_for_approval truly needs user attention.
     /// waiting_for_input means session is ready for new prompt (normal idle state).
+    /// toolFailed and error also need attention.
     var needsAttention: Bool {
-        self == .waitingForApproval
+        self == .waitingForApproval || self == .toolFailed || self == .error
     }
 
     var isActive: Bool {
-        self == .processing || self == .runningTool || self == .compacting
+        self == .processing || self == .runningTool || self == .compacting || self == .toolFailed || self == .error
     }
 }
 

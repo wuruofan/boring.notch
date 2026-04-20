@@ -590,6 +590,10 @@ struct AIStatusCardExpanded: View {
             Circle()
                 .fill(Color.white.opacity(0.2))
                 .frame(width: 6, height: 6)
+        case .toolFailed, .error:
+            Circle()
+                .fill(Color.red)
+                .frame(width: 6, height: 6)
         }
     }
 
