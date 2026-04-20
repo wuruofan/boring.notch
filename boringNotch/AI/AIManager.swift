@@ -3,6 +3,12 @@ import Defaults
 import Foundation
 import SwiftUI
 
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let AIWaitingForApprovalChanged = Notification.Name("AIWaitingForApprovalChanged")
+}
+
 @MainActor
 class AIManager: ObservableObject {
     static let shared = AIManager()
@@ -356,6 +362,9 @@ class AIManager: ObservableObject {
             coordinator.sneakPeek.persistent = false
             coordinator.toggleSneakPeek(status: false, type: .ai)
         }
+
+        // Notify polling speed change if waitingForApproval state changed
+        NotificationCenter.default.post(name: .AIWaitingForApprovalChanged, object: nil)
     }
 
     // MARK: - Approval Actions

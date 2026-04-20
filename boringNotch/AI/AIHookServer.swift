@@ -29,6 +29,12 @@ class AIHookServer {
     private var lastHashes: [String: String] = [:]  // sessionId -> hash
     private let hashQueue = DispatchQueue(label: "com.boringnotch.hashQueue")
 
+    // Thread-safe storage for notification observer
+    private var notificationObserverTask: Task<Void, Never>?
+
+    // @MainActor isolated state for polling speed
+    @MainActor private var hasWaitingForApproval: Bool = false
+
     // MARK: - Helper
 
     private func appendLog(_ msg: String) {
@@ -48,14 +54,36 @@ class AIHookServer {
     // MARK: - Public
 
     func start() {
-        appendLog("AIHookServer.start() - path=\(Self.stateFilePath)\n")
+        appendLog("AIHookServer.start() - path=\(Self.stateFileBasePath)\n")
+
+        // Set up Darwin Notification callback for immediate response
+        AIXPCClient.shared.onStateUpdateDetected = { [weak self] in
+            self?.pollStateFiles()
+        }
+
+        // Observe AIManager for waitingForApproval state changes
+        notificationObserverTask = Task { @MainActor [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: .AIWaitingForApprovalChanged) {
+                self?.updatePollingSpeed()
+            }
+        }
+
         startPolling()
+    }
+
+    @MainActor
+    private func updatePollingSpeed() {
+        hasWaitingForApproval = AIManager.shared.hasAnyPendingApproval
+        appendLog("updatePollingSpeed: waitingForApproval=\(hasWaitingForApproval)\n")
     }
 
     func stop() {
         pollingTask?.cancel()
         pollingTask = nil
-        appendLog("AIHookServer.stop() - polling stopped\n")
+        notificationObserverTask?.cancel()
+        notificationObserverTask = nil
+        AIXPCClient.shared.onStateUpdateDetected = nil
+        appendLog("AIHookServer.stop() - polling stopped, tasks cancelled, callback cleared\n")
     }
 
     func hasPendingPermission(sessionId: String) async -> Bool {
@@ -71,16 +99,15 @@ class AIHookServer {
     // MARK: - Polling
 
     private func startPolling() {
-        appendLog("startPolling: Starting multi-file polling task\n")
+        appendLog("startPolling: Starting event-driven polling with dynamic fallback\n")
         pollingTask = Task.detached { [weak self] in
-            var count = 0
             while !Task.isCancelled {
-                count += 1
-                if count % 50 == 0 {  // Log every 10 seconds (50 * 200ms)
-                    self?.appendLog("polling: tick \(count)\n")
+                // Thread-safe read: use await MainActor.run to read @MainActor isolated property
+                let interval = await MainActor.run {
+                    self?.hasWaitingForApproval ?? false ? 1.0 : 5.0
                 }
                 self?.pollStateFiles()
-                try? await Task.sleep(for: .milliseconds(200))
+                try? await Task.sleep(for: .seconds(interval))
             }
             self?.appendLog("polling: Task cancelled\n")
         }
