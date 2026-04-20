@@ -161,6 +161,7 @@
 		AIAI00180000000000000001 /* AIStatusAnimationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00170000000000000001 /* AIStatusAnimationView.swift */; };
 		AIAI001A00000000000001 /* CompactCapsuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00190000000000000001 /* CompactCapsuleView.swift */; };
 		AIAI001C0000000000000001 /* AISettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI001B0000000000000001 /* AISettingsView.swift */; };
+		AIAI00240000000000000001 /* ToolInputFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00250000000000000001 /* ToolInputFormatter.swift */; };
 		AIXP00010000000000000001 /* BoringNotchAIXPCHelper.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = AIXP00050000000000000001 /* BoringNotchAIXPCHelper.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AIXP00020000000000000001 /* BoringNotchAIXPCHelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIXP00060000000000000001 /* BoringNotchAIXPCHelperProtocol.swift */; };
 		AIXP00030000000000000001 /* AIXPCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIXP00070000000000000001 /* AIXPCClient.swift */; };
@@ -356,6 +357,7 @@
 		AIAI00170000000000000001 /* AIStatusAnimationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIStatusAnimationView.swift; sourceTree = "<group>"; };
 		AIAI00190000000000000001 /* CompactCapsuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactCapsuleView.swift; sourceTree = "<group>"; };
 		AIAI001B0000000000000001 /* AISettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AISettingsView.swift; sourceTree = "<group>"; };
+		AIAI00250000000000000001 /* ToolInputFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolInputFormatter.swift; sourceTree = "<group>"; };
 		AIXP00050000000000000001 /* BoringNotchAIXPCHelper.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = BoringNotchAIXPCHelper.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
 		AIXP00060000000000000001 /* BoringNotchAIXPCHelperProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoringNotchAIXPCHelperProtocol.swift; sourceTree = "<group>"; };
 		AIXP00070000000000000001 /* AIXPCClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIXPCClient.swift; sourceTree = "<group>"; };
@@ -880,6 +882,7 @@
 				AIAI00170000000000000001 /* AIStatusAnimationView.swift */,
 				AIAI00190000000000000001 /* CompactCapsuleView.swift */,
 				AIAI001B0000000000000001 /* AISettingsView.swift */,
+				AIAI00250000000000000001 /* ToolInputFormatter.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1206,6 +1209,7 @@
 				AIAI00180000000000000001 /* AIStatusAnimationView.swift in Sources */,
 				AIAI001A00000000000001 /* CompactCapsuleView.swift in Sources */,
 				AIAI001C0000000000000001 /* AISettingsView.swift in Sources */,
+				AIAI00240000000000000001 /* ToolInputFormatter.swift in Sources */,
 				AIXP00020000000000000001 /* BoringNotchAIXPCHelperProtocol.swift in Sources */,
 				AIXP00030000000000000001 /* AIXPCClient.swift in Sources */,
 			);
