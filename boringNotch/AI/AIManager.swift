@@ -501,6 +501,10 @@ class AIManager: ObservableObject {
                 timeout = 120  // Tool execution - long timeout (2 minutes)
             case .compacting:
                 timeout = 60  // Context compression - medium timeout
+            case .toolFailed:
+                timeout = 10  // Tool failed - short display then back to idle
+            case .error:
+                timeout = 10  // Error state - short display then back to idle
             default:
                 continue  // Not an active phase, skip
             }
