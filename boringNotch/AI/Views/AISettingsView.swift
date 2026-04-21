@@ -17,6 +17,12 @@ struct AISettingsView: View {
     @State private var hookInstalled = AIHookInstaller.isInstalled()
     @State private var showUninstallWarning = false
 
+    // Diagnostic states
+    @State private var socketExists = false
+    @State private var activeSessionsCount = 0
+    @State private var lastHealthCheck: Date? = nil
+    @State private var showingDiagnostics = false
+
     var body: some View {
         Form {
             Section {
@@ -99,19 +105,98 @@ struct AISettingsView: View {
                 }
 
                 HStack {
-                    Text("Server status")
+                    Text("Socket file")
+                    Spacer()
+                    Image(systemName: socketExists ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundStyle(socketExists ? .green : .red)
+                        .font(.caption)
+                    Text(socketExists ? "Exists" : "Missing")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack {
+                    Text("XPC Service")
                     Spacer()
                     Circle()
-                        .fill(aiManager.isConnected ? .green : .gray)
+                        .fill(aiManager.isConnected ? .green : .red)
                         .frame(width: 8, height: 8)
-                    Text(aiManager.isConnected ? "Running" : "Stopped")
+                    Text(aiManager.isConnected ? "Connected" : "Disconnected")
                         .font(.caption)
+                }
+
+                if !aiManager.sessions.isEmpty {
+                    HStack {
+                        Text("Active sessions")
+                        Spacer()
+                        Text("\(aiManager.sessions.count)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ForEach(Array(aiManager.sessions.values), id: \.id) { session in
+                        HStack {
+                            Text(session.id.prefix(8))
+                                .font(.caption)
+                                .monospaced()
+                            Spacer()
+                            Text(session.phase.rawValue)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                if let lastCheck = lastHealthCheck {
+                    HStack {
+                        Text("Last health check")
+                        Spacer()
+                        Text(lastCheck, style: .relative)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                HStack {
+                    Button("Refresh Status") {
+                        refreshDiagnostics()
+                    }
+                    .buttonStyle(.bordered)
+
+                    if !aiManager.isConnected {
+                        Button("Restart XPC Service") {
+                            Task {
+                                _ = await AIXPCClient.shared.stopServer()
+                                try? await Task.sleep(for: .milliseconds(500))
+                                _ = await AIXPCClient.shared.startServer()
+                                refreshDiagnostics()
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 }
             } header: {
                 Text("Diagnostics")
+            } footer: {
+                Text("Socket file and XPC service status are checked automatically every 30 seconds.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .navigationTitle("AI Agents")
+        .onAppear {
+            refreshDiagnostics()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .AIWaitingForApprovalChanged)) { _ in
+            // Refresh when AI state changes
+            refreshDiagnostics()
+        }
+    }
+
+    private func refreshDiagnostics() {
+        socketExists = FileManager.default.fileExists(atPath: "/tmp/boringnotch-ai.sock")
+        activeSessionsCount = aiManager.sessions.count
+        lastHealthCheck = Date()
     }
 
     private func performUninstall() {

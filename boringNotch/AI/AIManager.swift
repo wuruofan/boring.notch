@@ -79,6 +79,9 @@ class AIManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var persistentPeekTimeoutTask: Task<Void, Never>?
     private var staleProcessingCleanupTimer: Timer?
+    private var xpcHealthCheckTimer: Timer?
+    private var consecutiveHealthCheckFailures = 0
+    private let maxHealthCheckFailures = 3
 
     private static let logPath: String = {
         let cachesPath = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.path ?? ""
@@ -142,12 +145,22 @@ class AIManager: ObservableObject {
                 self?.convertStaleProcessingToIdle()
             }
         }
+
+        // Start XPC health check timer (every 30 seconds)
+        xpcHealthCheckTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                await self?.performXPCHealthCheck()
+            }
+        }
+        appendAILog("AIManager: XPC health check timer started (30s interval)\n")
     }
 
     func stop() {
         hookServer?.stop()
         staleProcessingCleanupTimer?.invalidate()
         staleProcessingCleanupTimer = nil
+        xpcHealthCheckTimer?.invalidate()
+        xpcHealthCheckTimer = nil
         Task {
             _ = await AIXPCClient.shared.stopServer()
         }
@@ -156,6 +169,64 @@ class AIManager: ObservableObject {
         isActive = false
         isConnected = false
         persistentPeekTimeoutTask?.cancel()
+    }
+
+    // MARK: - XPC Health Check
+
+    /// Performs periodic health check on XPC connection.
+    /// Automatically restarts XPC service if it's not responding.
+    @MainActor
+    private func performXPCHealthCheck() async {
+        // Skip if AI is disabled
+        guard Defaults[.aiEnabled] else { return }
+
+        appendAILog("AIManager: Performing XPC health check...\n")
+
+        // Check 1: Verify socket file exists
+        let socketPath = "/tmp/boringnotch-ai.sock"
+        let socketExists = FileManager.default.fileExists(atPath: socketPath)
+
+        // Check 2: Verify XPC service is responding
+        let isRunning = await AIXPCClient.shared.isServerRunning()
+
+        appendAILog("AIManager: Health check - socket exists: \(socketExists), isRunning: \(isRunning), isConnected: \(isConnected)\n")
+
+        // Determine if restart is needed
+        let needsRestart: Bool
+        if !socketExists || !isRunning {
+            consecutiveHealthCheckFailures += 1
+            appendAILog("AIManager: Health check failed (#\(consecutiveHealthCheckFailures))\n")
+            needsRestart = consecutiveHealthCheckFailures >= maxHealthCheckFailures
+        } else {
+            // Reset failure counter on success
+            if consecutiveHealthCheckFailures > 0 {
+                consecutiveHealthCheckFailures = 0
+                appendAILog("AIManager: Health check recovered, reset failure counter\n")
+            }
+            needsRestart = false
+        }
+
+        // Restart if we've had consecutive failures
+        if needsRestart {
+            appendAILog("AIManager: XPC service unhealthy, attempting restart...\n")
+
+            // Stop existing connection
+            _ = await AIXPCClient.shared.stopServer()
+
+            // Small delay to ensure cleanup
+            try? await Task.sleep(for: .milliseconds(500))
+
+            // Restart server
+            let success = await AIXPCClient.shared.startServer()
+            isConnected = success
+
+            if success {
+                consecutiveHealthCheckFailures = 0
+                appendAILog("AIManager: XPC service restarted successfully\n")
+            } else {
+                appendAILog("AIManager: XPC service restart failed\n")
+            }
+        }
     }
 
     // MARK: - Event Handling

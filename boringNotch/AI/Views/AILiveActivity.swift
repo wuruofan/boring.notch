@@ -26,19 +26,27 @@ struct DualLiveActivity: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            // Left: AI icon - use highest priority session's status
-            ZStack(alignment: .bottomTrailing) {
+            // Left: AI icon (always crab, representing AI agent)
+            // Badge positioned inside crab icon (bottom-left area)
+            ZStack(alignment: .bottomLeading) {
+                // Crab icon: running if active, static if waiting/sleeping
                 if let session = displaySession {
-                    SessionStatusIcon(phase: session.phase, size: iconSize)
+                    if session.phase.isActive {
+                        AgentIconView(size: iconSize, animateLegs: true)
+                    } else if session.phase == .waitingForApproval {
+                        AgentIconView(size: iconSize, animateLegs: false)  // Static crab while waiting for approval
+                    } else {
+                        SleepingCrabIcon(size: iconSize)
+                    }
                 } else {
-                    SleepIcon(size: iconSize)  // Default light purple
+                    SleepingCrabIcon(size: iconSize)
                 }
 
-                // Session count badge (only when multiple sessions)
-                // iPhone-style badge: partially outside the icon boundary
+                // Session count badge (pixel-style, mostly inside crab icon)
+                // Left edge slightly outside (2 pixels), bottom edge slightly outside
                 if aiManager.sessions.count > 1 {
-                    SessionCountBadge(count: aiManager.sessions.count, badgeSize: iconSize * 0.65)
-                        .offset(x: iconSize * 0.35, y: iconSize * 0.25)  // Shift towards bottom-right, slightly higher
+                    SessionCountBadge(count: aiManager.sessions.count, badgeSize: iconSize * 0.4)
+                        .offset(x: -iconSize * 0.08, y: iconSize * 0.1)  // Left and bottom slightly outside
                 }
             }
 
@@ -127,19 +135,27 @@ struct AIOnlyLiveActivity: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // Left: AI icon - use highest priority session's status
-            ZStack(alignment: .bottomTrailing) {
+            // Left: AI icon (always crab, representing AI agent)
+            // Badge positioned inside crab icon (bottom-left area)
+            ZStack(alignment: .bottomLeading) {
+                // Crab icon: running if active, static if waiting/sleeping
                 if let session = displaySession {
-                    SessionStatusIcon(phase: session.phase, size: iconSize)
+                    if session.phase.isActive {
+                        AgentIconView(size: iconSize, animateLegs: true)
+                    } else if session.phase == .waitingForApproval {
+                        AgentIconView(size: iconSize, animateLegs: false)  // Static crab while waiting for approval
+                    } else {
+                        SleepingCrabIcon(size: iconSize)
+                    }
                 } else {
-                    SleepIcon(size: iconSize)  // Default light purple
+                    SleepingCrabIcon(size: iconSize)
                 }
 
-                // Session count badge (only when multiple sessions)
-                // iPhone-style badge: partially outside the icon boundary
+                // Session count badge (pixel-style, mostly inside crab icon)
+                // Left edge slightly outside (2 pixels), bottom edge slightly outside
                 if aiManager.sessions.count > 1 {
-                    SessionCountBadge(count: aiManager.sessions.count, badgeSize: iconSize * 0.65)
-                        .offset(x: iconSize * 0.35, y: iconSize * 0.25)  // Shift towards bottom-right, slightly higher
+                    SessionCountBadge(count: aiManager.sessions.count, badgeSize: iconSize * 0.4)
+                        .offset(x: -iconSize * 0.08, y: iconSize * 0.1)  // Left and bottom slightly outside
                 }
             }
 
@@ -163,25 +179,140 @@ struct AIOnlyLiveActivity: View {
     }
 }
 
-// MARK: - Session Count Badge
+// MARK: - Session Count Badge (Pixel-style number, no background)
 struct SessionCountBadge: View {
     let count: Int
-    let badgeSize: CGFloat  // Diameter of the badge circle
+    let badgeSize: CGFloat  // Size of the digit display
 
     var body: some View {
-        ZStack {
-            // Background circle
-            Circle()
-                .fill(Color.red.opacity(0.9))
-                .frame(width: badgeSize, height: badgeSize)
+        // Pixel-style number, no background circle
+        PixelDigitView(digit: count, size: badgeSize, color: .white)
+    }
+}
 
-            // Count text - font size proportional to badge diameter
-            Text("\(count)")
-                .font(.system(size: badgeSize * 0.55, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
-                .minimumScaleFactor(0.6)
-                .lineLimit(1)
+// MARK: - Pixel Digit View
+struct PixelDigitView: View {
+    let digit: Int
+    let size: CGFloat
+    let color: Color
+
+    // Pixel patterns for digits 0-9 (5x7 grid)
+    private let digitPatterns: [Int: [[Bool]]] = [
+        0: [
+            [true, true, true, true, true],
+            [true, false, false, false, true],
+            [true, false, false, false, true],
+            [true, false, false, false, true],
+            [true, false, false, false, true],
+            [true, false, false, false, true],
+            [true, true, true, true, true],
+        ],
+        1: [
+            [false, false, true, false, false],
+            [false, true, true, false, false],
+            [false, false, true, false, false],
+            [false, false, true, false, false],
+            [false, false, true, false, false],
+            [false, false, true, false, false],
+            [false, true, true, true, false],
+        ],
+        2: [
+            [true, true, true, true, true],
+            [false, false, false, false, true],
+            [false, false, false, false, true],
+            [true, true, true, true, true],
+            [true, false, false, false, false],
+            [true, false, false, false, false],
+            [true, true, true, true, true],
+        ],
+        3: [
+            [true, true, true, true, true],
+            [false, false, false, false, true],
+            [false, false, false, false, true],
+            [true, true, true, true, true],
+            [false, false, false, false, true],
+            [false, false, false, false, true],
+            [true, true, true, true, true],
+        ],
+        4: [
+            [true, false, false, false, true],
+            [true, false, false, false, true],
+            [true, false, false, false, true],
+            [true, true, true, true, true],
+            [false, false, false, false, true],
+            [false, false, false, false, true],
+            [false, false, false, false, true],
+        ],
+        5: [
+            [true, true, true, true, true],
+            [true, false, false, false, false],
+            [true, false, false, false, false],
+            [true, true, true, true, true],
+            [false, false, false, false, true],
+            [false, false, false, false, true],
+            [true, true, true, true, true],
+        ],
+        6: [
+            [true, true, true, true, true],
+            [true, false, false, false, false],
+            [true, false, false, false, false],
+            [true, true, true, true, true],
+            [true, false, false, false, true],
+            [true, false, false, false, true],
+            [true, true, true, true, true],
+        ],
+        7: [
+            [true, true, true, true, true],
+            [false, false, false, false, true],
+            [false, false, false, false, true],
+            [false, false, false, true, false],
+            [false, false, false, true, false],
+            [false, false, true, false, false],
+            [false, false, true, false, false],
+        ],
+        8: [
+            [true, true, true, true, true],
+            [true, false, false, false, true],
+            [true, false, false, false, true],
+            [true, true, true, true, true],
+            [true, false, false, false, true],
+            [true, false, false, false, true],
+            [true, true, true, true, true],
+        ],
+        9: [
+            [true, true, true, true, true],
+            [true, false, false, false, true],
+            [true, false, false, false, true],
+            [true, true, true, true, true],
+            [false, false, false, false, true],
+            [false, false, false, false, true],
+            [true, true, true, true, true],
+        ]
+    ]
+
+    var body: some View {
+        Canvas { context, canvasSize in
+            guard let pattern = digitPatterns[digit % 10] else { return }
+
+            let pixelWidth: CGFloat = 5
+            let pixelHeight: CGFloat = 7
+            let overlap: CGFloat = 0.15  // Small overlap for tight connection
+            let pixelSize = min(canvasSize.width / pixelWidth, canvasSize.height / pixelHeight) + overlap
+
+            for (y, row) in pattern.enumerated() {
+                for (x, isOn) in row.enumerated() {
+                    if isOn {
+                        let rect = CGRect(
+                            x: CGFloat(x) * (pixelSize - overlap),
+                            y: CGFloat(y) * (pixelSize - overlap),
+                            width: pixelSize,
+                            height: pixelSize
+                        )
+                        context.fill(Path(rect), with: .color(color))
+                    }
+                }
+            }
         }
-        // No extra frame - badge is exactly the circle size
+        .frame(width: size, height: size)
     }
 }

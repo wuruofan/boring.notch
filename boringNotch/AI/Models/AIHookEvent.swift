@@ -56,6 +56,10 @@ struct AIHookEvent: Codable {
             if event == "SessionEnd" {
                 return .ended
             }
+            // SessionTimeout is synthetic event for stale processing
+            if event == "SessionTimeout" {
+                return .idle
+            }
             return .idle
         }
     }

@@ -58,7 +58,9 @@ class AIHookServer {
 
         // Set up Darwin Notification callback for immediate response
         AIXPCClient.shared.onStateUpdateDetected = { [weak self] in
-            self?.pollStateFiles()
+            Task {
+                await self?.pollStateFiles()
+            }
         }
 
         // Observe AIManager for waitingForApproval state changes
@@ -98,22 +100,25 @@ class AIHookServer {
 
     // MARK: - Polling
 
+    private var isFirstPoll = true  // Track first poll after start
+
     private func startPolling() {
         appendLog("startPolling: Starting event-driven polling with dynamic fallback\n")
+        isFirstPoll = true  // Reset on start
         pollingTask = Task.detached { [weak self] in
             while !Task.isCancelled {
                 // Thread-safe read: use await MainActor.run to read @MainActor isolated property
                 let interval = await MainActor.run {
                     self?.hasWaitingForApproval ?? false ? 1.0 : 5.0
                 }
-                self?.pollStateFiles()
+                await self?.pollStateFiles()
                 try? await Task.sleep(for: .seconds(interval))
             }
             self?.appendLog("polling: Task cancelled\n")
         }
     }
 
-    private func pollStateFiles() {
+    private func pollStateFiles() async {
         let basePath = Self.stateFileBasePath
 
         guard let files = try? FileManager.default.contentsOfDirectory(atPath: basePath) else {
@@ -130,18 +135,24 @@ class AIHookServer {
             processStateFileWithDedup(path: filePath, fileName: fileName)
         }
 
-        // Zombie file cleanup: delete files older than timeout
-        cleanupZombieFiles(files: stateFiles, basePath: basePath)
+        // Mark first poll as complete after processing all files
+        if isFirstPoll {
+            isFirstPoll = false
+            appendLog("pollStateFiles: First poll complete, zombie cleanup enabled\n")
+        }
+
+        // Zombie file cleanup: delete files older than timeout (only after first poll)
+        if !isFirstPoll {
+            // Get active session IDs on main thread before cleanup
+            let activeSessionIds = await MainActor.run {
+                Set(AIManager.shared.sessions.keys)
+            }
+            cleanupZombieFiles(files: stateFiles, basePath: basePath, activeSessionIds: activeSessionIds)
+        }
     }
 
     private func processStateFileWithDedup(path: String, fileName: String) {
-        // Check file modification time for zombie detection
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
-              let modDate = attrs[.modificationDate] as? Date else {
-            return
-        }
-
-        // Parse file to check status - use longer timeout for waiting_for_approval
+        // Parse file first to get status
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)), !data.isEmpty else {
             return
         }
@@ -151,11 +162,19 @@ class AIHookServer {
             return event.status == "waiting_for_approval"
         }()
 
-        // Skip zombie files (older than timeout)
-        let skipTimeout: TimeInterval = isApprovalFile ? 1800 : 300  // 30 min for approval, 5 min otherwise
-        if Date().timeIntervalSince(modDate) > skipTimeout {
-            appendLog("processStateFileWithDedup: Skipping zombie file \(fileName)\n")
+        // Get file modification date
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+              let modDate = attrs[.modificationDate] as? Date else {
             return
+        }
+
+        // Skip zombie files only after first poll (not on startup)
+        if !isFirstPoll {
+            let skipTimeout: TimeInterval = isApprovalFile ? 1800 : 300  // 30 min for approval, 5 min otherwise
+            if Date().timeIntervalSince(modDate) > skipTimeout {
+                appendLog("processStateFileWithDedup: Skipping zombie file \(fileName)\n")
+                return
+            }
         }
 
         // Extract sessionId from filename
@@ -169,11 +188,40 @@ class AIHookServer {
         if existingHash == contentHash { return }
         hashQueue.async { self.lastHashes[sessionId] = contentHash }
 
+        // On first poll (startup), check if file is stale (>5 min) and processing
+        // If so, send a synthetic idle event instead
+        let isStaleProcessing = isFirstPoll && !isApprovalFile && Date().timeIntervalSince(modDate) > 300
+        if isStaleProcessing {
+            appendLog("processStateFileWithDedup: Stale processing file \(fileName), converting to idle\n")
+            processStaleFileAsIdle(data: data, modDate: modDate)
+            return
+        }
+
         appendLog("processStateFileWithDedup: New data for \(sessionId), processing\n")
         processStateFile(data: data)
     }
 
-    private func cleanupZombieFiles(files: [String], basePath: String) {
+    private func processStaleFileAsIdle(data: Data, modDate: Date) {
+        guard var event = try? JSONDecoder().decode(AIHookEvent.self, from: data) else {
+            return
+        }
+        // Create synthetic event with idle status
+        event = AIHookEvent(
+            sessionId: event.sessionId,
+            cwd: event.cwd,
+            event: "SessionTimeout",
+            status: "idle",
+            tool: event.tool,
+            toolInput: event.toolInput,
+            toolUseId: event.toolUseId,
+            pid: event.pid,
+            tty: event.tty
+        )
+        appendLog("processStaleFileAsIdle: Converting stale session \(event.sessionId.prefix(8)) to idle\n")
+        onEvent?(event)
+    }
+
+    private func cleanupZombieFiles(files: [String], basePath: String, activeSessionIds: Set<String>) {
         for fileName in files {
             let filePath = basePath + "/" + fileName
             guard let attrs = try? FileManager.default.attributesOfItem(atPath: filePath),
@@ -182,11 +230,17 @@ class AIHookServer {
                 continue
             }
 
-            // Parse file to check status - don't delete if waiting_for_approval
-            let isApprovalFile: Bool = {
-                guard let event = try? JSONDecoder().decode(AIHookEvent.self, from: data) else { return false }
-                return event.status == "waiting_for_approval"
+            // Parse file to check status and sessionId
+            let (isApprovalFile, fileSessionId): (Bool, String) = {
+                guard let event = try? JSONDecoder().decode(AIHookEvent.self, from: data) else { return (false, "") }
+                return (event.status == "waiting_for_approval", event.sessionId)
             }()
+
+            // Don't delete if this session is still active in AIManager
+            if activeSessionIds.contains(fileSessionId) {
+                appendLog("cleanupZombieFiles: Preserving active session file \(fileName)\n")
+                continue
+            }
 
             let timeout: TimeInterval = isApprovalFile ? 1800 : 300  // 30 min for approval, 5 min otherwise
 
