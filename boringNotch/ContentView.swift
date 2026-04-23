@@ -144,7 +144,11 @@ struct ContentView: View {
                         handleHover(hovering)
                     }
                     .onTapGesture {
-                        doOpen()
+                        // Only respond to tap when notch is closed
+                        // When open, let child views handle their own taps
+                        if vm.notchState == .closed {
+                            doOpen()
+                        }
                     }
                     .conditionalModifier(Defaults[.enableGestures]) { view in
                         view

@@ -104,7 +104,7 @@ struct DualLiveActivity: View {
                 AIStatusAnimationView(phase: session.phase, size: iconSize)
                     .frame(width: iconSize, height: iconSize)
             } else {
-                SleepIcon(size: iconSize)  // Uses purple by default
+                SleepingCrabIcon(size: iconSize, crabColor: claudeOrange)
                     .frame(width: iconSize, height: iconSize)
             }
         }
@@ -171,7 +171,7 @@ struct AIOnlyLiveActivity: View {
                 AIStatusAnimationView(phase: session.phase, size: iconSize)
                     .frame(width: iconSize, height: iconSize)
             } else {
-                SleepIcon(size: iconSize)  // Uses purple by default
+                SleepingCrabIcon(size: iconSize, crabColor: claudeOrange)
                     .frame(width: iconSize, height: iconSize)
             }
         }
