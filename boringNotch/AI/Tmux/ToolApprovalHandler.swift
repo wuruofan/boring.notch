@@ -26,16 +26,13 @@ actor ToolApprovalHandler {
     func jumpToTerminal(tty: String?) async {
         guard let tty = tty else { return }
 
-        let script: String
+        let appName: String
         if tty.contains("iTerm") || tty.contains("iterm") {
-            script = "tell application \"iTerm\" to activate"
+            appName = "iTerm2"
         } else {
-            script = "tell application \"Terminal\" to activate"
+            appName = "Terminal"
         }
 
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        task.arguments = ["-e", script]
-        try? task.run()
+        _ = await AIXPCClient.shared.runShellCommand(command: "open -a '\(appName)'")
     }
 }

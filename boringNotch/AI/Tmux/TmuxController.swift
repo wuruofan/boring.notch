@@ -33,14 +33,13 @@ actor TmuxController {
 
     func isTmuxAvailable() async -> Bool {
         let result = await runCommand("tmux -V")
-        return result.exitCode == 0
+        return result.success
     }
 
     func listPanes() async -> [(target: TmuxTarget, pid: Int)] {
-        let format = "#{session_name}:#{window_index}.#{pane_index} #{pane_pid}"
-        let result = await runCommand("tmux list-panes -a -F '\(format)'")
+        let result = await runCommand("tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{pane_pid}'")
 
-        guard result.exitCode == 0 else { return [] }
+        guard result.success else { return [] }
 
         var panes: [(TmuxTarget, Int)] = []
         for line in result.output.components(separatedBy: "\n") {
@@ -60,36 +59,15 @@ actor TmuxController {
             command += " && tmux send-keys -t \(target.targetString) Enter"
         }
         let result = await runCommand(command)
-        return result.exitCode == 0
+        return result.success
     }
 
     func switchToPane(target: TmuxTarget) async -> Bool {
-        let result1 = await runCommand("tmux select-window -t \(target.session):\(target.window)")
-        let result2 = await runCommand("tmux select-pane -t \(target.targetString)")
-        return result1.exitCode == 0 && result2.exitCode == 0
+        let result = await runCommand("tmux switch-client -t \(target.targetString)")
+        return result.success
     }
 
-    func runCommand(_ command: String) async -> (output: String, exitCode: Int32) {
-        await withCheckedContinuation { continuation in
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            task.arguments = ["-c", command]
-
-            let pipe = Pipe()
-            task.standardOutput = pipe
-            task.standardError = Pipe()
-
-            do {
-                try task.run()
-                task.waitUntilExit()
-
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let output = String(data: data, encoding: .utf8) ?? ""
-
-                continuation.resume(returning: (output, task.terminationStatus))
-            } catch {
-                continuation.resume(returning: ("", -1))
-            }
-        }
+    func runCommand(_ command: String) async -> (success: Bool, output: String) {
+        await AIXPCClient.shared.runShellCommand(command: command)
     }
 }

@@ -1,81 +1,145 @@
 import SwiftUI
+import AppKit
+import Defaults
 
 /// Single session row display.
-/// Reference: Claude-Island InstanceRow
 struct SessionRow: View {
     let session: AISessionState
     @State private var isHovered = false
-
-    private var isProcessing: Bool {
-        session.phase.isActive
-    }
+    @State private var isClicked = false
+    @Default(.aiSleepAnimationEnabled) private var sleepAnimationEnabled
 
     private var isWaitingForApproval: Bool {
         session.phase == .waitingForApproval
     }
 
-    private var isIdle: Bool {
-        session.phase == .idle || session.phase == .ended || session.phase == .waitingForInput || session.phase == .stopPending || session.phase == .toolFailed || session.phase == .error
-    }
-
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            // Status indicator
-            statusIndicator
-                .frame(width: 16, height: 16)
-
-            // Project and tool info - fixed two lines
-            VStack(alignment: .leading, spacing: 2) {
-                // Line 1: Project name
-                Text(projectName)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-
-                // Line 2: Tool name or status text
-                Text(secondLineText)
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundColor(secondLineColor)
-                    .lineLimit(1)
+        Button(action: {
+            isClicked = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isClicked = false
             }
-            .frame(height: 34, alignment: .leading)  // Fixed height for two lines
-
-            Spacer(minLength: 0)
-
-            // Approval buttons
-            if isWaitingForApproval, let request = session.permissionRequest {
-                ApprovalButtons(
-                    sessionId: session.id,
-                    requestId: request.id
-                )
+            Task {
+                await jumpToSession()
             }
+        }) {
+            HStack(alignment: .center, spacing: 10) {
+                statusIndicator
+                    .frame(width: 16, height: 16)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(projectName)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+
+                    Text(secondLineText)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundColor(secondLineColor)
+                        .lineLimit(1)
+                }
+                .frame(height: 34, alignment: .leading)
+
+                Spacer(minLength: 0)
+
+                if isWaitingForApproval, let request = session.permissionRequest {
+                    ApprovalButtons(sessionId: session.id, requestId: request.id)
+                }
+            }
+            .padding(.leading, 8)
+            .padding(.trailing, 12)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isClicked ? Color.white.opacity(0.3) : (isHovered ? Color.white.opacity(0.06) : Color.clear))
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .contentShape(Rectangle())
         }
-        .padding(.leading, 8)
-        .padding(.trailing, 12)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(isHovered ? Color.white.opacity(0.06) : Color.clear)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .buttonStyle(BorderlessButtonStyle())
         .onHover { isHovered = $0 }
     }
 
-    /// Second line display using ToolInputFormatter
+    // MARK: - Jump to Session
+
+    private func jumpToSession() async {
+        guard let cwd = session.cwd else { return }
+
+        // Check if current terminal is inside tmux (switch-client only works then)
+        let clientResult = await AIXPCClient.shared.runTmuxCommand(
+            command: "tmux display-message -p '#{client_session}' 2>/dev/null || echo 'NO_TMUX'"
+        )
+
+        let hasActiveTmuxClient = clientResult.success && !clientResult.output.contains("NO_TMUX")
+
+        if hasActiveTmuxClient {
+            // Find target by CWD and switch
+            let listResult = await AIXPCClient.shared.runTmuxCommand(
+                command: "tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{pane_current_path}'"
+            )
+
+            for line in listResult.output.components(separatedBy: "\n") {
+                let parts = line.split(separator: " ", maxSplits: 1)
+                guard parts.count == 2 else { continue }
+                let target = String(parts[0])
+                let path = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if path == cwd || cwd.hasPrefix(path + "/") {
+                    _ = await AIXPCClient.shared.runTmuxCommand(
+                        command: "tmux switch-client -t \(target)"
+                    )
+                    break
+                }
+            }
+        }
+
+        // Always activate terminal app
+        await activateTerminalApp()
+    }
+
+    // MARK: - Terminal Activation
+
+    private func activateTerminalApp() async {
+        let runningApps = NSWorkspace.shared.runningApplications
+
+        // Terminal priority (most popular first)
+        let terminalPriority: [(bundleId: String, appName: String)] = [
+            ("com.mitchellh.ghostty", "Ghostty"),
+            ("com.googlecode.iterm2", "iTerm2"),
+            ("net.kovidgoyal.kitty", "kitty"),
+            ("org.alacritty", "Alacritty"),
+            ("dev.warp.Warp-Stable", "Warp"),
+            ("org.wezfurlong.wezterm", "WezTerm"),
+            ("com.hyper.Hyper", "Hyper"),
+            ("com.apple.Terminal", "Terminal"),
+        ]
+
+        for terminal in terminalPriority {
+            if runningApps.contains(where: { $0.bundleIdentifier == terminal.bundleId }) {
+                _ = await AIXPCClient.shared.runShellCommand(command: "open -a '\(terminal.appName)'")
+                return
+            }
+        }
+
+        // Fallback: open Terminal.app with cwd
+        if let cwd = session.cwd {
+            _ = await AIXPCClient.shared.runShellCommand(command: "open -a Terminal '\(cwd)'")
+        }
+    }
+
+    // MARK: - Display Helpers
+
     private var secondLineDisplay: (text: String, color: Color) {
         ToolInputFormatter.format(
             tool: session.currentTool ?? "",
-            input: session.toolInput,  // Use session.toolInput
+            input: session.toolInput,
             phase: session.phase
         )
     }
 
-    /// Second line text: tool name or status
     private var secondLineText: String {
         secondLineDisplay.text
     }
 
-    /// Second line color based on status
     private var secondLineColor: Color {
         secondLineDisplay.color
     }
@@ -94,18 +158,13 @@ struct SessionRow: View {
         case .error:
             ErrorIndicatorIcon(size: 16)
         case .idle, .ended, .stopPending:
-            SleepIcon(size: 16)  // Default light purple, no opacity
+            SleepIcon(size: 16, enableAnimation: sleepAnimationEnabled)
         }
     }
 
     private var projectName: String {
         guard let cwd = session.cwd else { return "Claude Code" }
-        let parts = cwd.split(separator: "/")
-        let baseName = parts.last.map(String.init) ?? "Claude Code"
-
-        if session.subagentCount > 0 {
-            return "\(baseName) [\(session.subagentCount)]"
-        }
-        return baseName
+        let baseName = cwd.split(separator: "/").last.map(String.init) ?? "Claude Code"
+        return session.subagentCount > 0 ? "\(baseName) [\(session.subagentCount)]" : baseName
     }
 }
