@@ -70,4 +70,38 @@ class BoringNotchAIXPCHelper: NSObject, BoringNotchAIXPCHelperProtocol {
         let success = hookServer?.cleanupStateFile(sessionId: sessionId) ?? false
         reply(success)
     }
+
+    // MARK: - Tmux Commands
+
+    func runTmuxCommand(command: String, with reply: @escaping (Bool, String) -> Void) {
+        runShellCommandInternal(command: command, reply: reply)
+    }
+
+    func runShellCommand(command: String, with reply: @escaping (Bool, String) -> Void) {
+        runShellCommandInternal(command: command, reply: reply)
+    }
+
+    private func runShellCommandInternal(command: String, reply: @escaping (Bool, String) -> Void) {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        task.arguments = ["-c", command]
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        task.standardOutput = outputPipe
+        task.standardError = errorPipe
+
+        do {
+            try task.run()
+            task.waitUntilExit()
+
+            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: outputData, encoding: .utf8) ?? ""
+
+            let success = task.terminationStatus == 0
+            reply(success, output)
+        } catch {
+            reply(false, error.localizedDescription)
+        }
+    }
 }

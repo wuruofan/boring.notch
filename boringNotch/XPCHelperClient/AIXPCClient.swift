@@ -285,4 +285,28 @@ final class AIXPCClient {
             return false
         }
     }
+
+    // MARK: - Tmux Commands
+
+    nonisolated func runTmuxCommand(command: String) async -> (success: Bool, output: String) {
+        return await runShellCommandInternal(command: command)
+    }
+
+    nonisolated func runShellCommand(command: String) async -> (success: Bool, output: String) {
+        return await runShellCommandInternal(command: command)
+    }
+
+    private nonisolated func runShellCommandInternal(command: String) async -> (success: Bool, output: String) {
+        do {
+            let service = await MainActor.run { ensureRemoteService() }
+            return try await service.withContinuation { service, continuation in
+                service.runShellCommand(command: command) { success, output in
+                    continuation.resume(returning: (success, output))
+                }
+            }
+        } catch {
+            NSLog("AIXPCClient: runShellCommand failed: \(error)")
+            return (false, error.localizedDescription)
+        }
+    }
 }

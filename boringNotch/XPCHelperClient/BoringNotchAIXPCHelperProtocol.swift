@@ -35,4 +35,14 @@ import Foundation
     func startInterruptWatcher(sessionId: String, cwd: String, with reply: @escaping (Bool) -> Void)
     /// Stop watching a session's JSONL file
     func stopInterruptWatcher(sessionId: String, with reply: @escaping (Bool) -> Void)
+
+    // MARK: - Tmux Commands
+
+    /// Run a tmux command (switch-client, etc.)
+    /// Returns (success: Bool, output: String)
+    func runTmuxCommand(command: String, with reply: @escaping (Bool, String) -> Void)
+
+    /// Run a shell command (open, etc.)
+    /// Returns (success: Bool, output: String)
+    func runShellCommand(command: String, with reply: @escaping (Bool, String) -> Void)
 }
