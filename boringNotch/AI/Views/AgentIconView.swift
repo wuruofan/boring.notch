@@ -10,7 +10,7 @@ struct ClaudeCrabIcon: View {
     var animateLegs: Bool = false
 
     @State private var legPhase: Int = 0
-    private let legTimer = Timer.publish(every: 0.15, on: .main, in: .common).autoconnect()
+    @State private var animationTask: Task<Void, Never>?
 
     init(size: CGFloat = 16, color: Color = claudeOrange, animateLegs: Bool = false) {
         self.size = size
@@ -78,10 +78,19 @@ struct ClaudeCrabIcon: View {
             context.fill(rightEye, with: .color(.black))
         }
         .frame(width: size, height: size)
-        .onReceive(legTimer) { _ in
+        .onAppear {
             if animateLegs {
-                legPhase = (legPhase + 1) % 4
+                animationTask = Task {
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .milliseconds(150))
+                        legPhase = (legPhase + 1) % 4
+                    }
+                }
             }
+        }
+        .onDisappear {
+            animationTask?.cancel()
+            animationTask = nil
         }
     }
 }
@@ -89,19 +98,27 @@ struct ClaudeCrabIcon: View {
 // MARK: - Processing Spinner
 struct ProcessingSpinner: View {
     @State private var phase: Int = 0
+    @State private var animationTask: Task<Void, Never>?
 
     private let symbols = ["·", "✢", "✳", "∗", "✻", "✽"]
     private let color = claudeOrange
-
-    private let timer = Timer.publish(every: 0.15, on: .main, in: .common).autoconnect()
 
     var body: some View {
         Text(symbols[phase % symbols.count])
             .font(.system(size: 12, weight: .bold))
             .foregroundColor(color)
             .frame(width: 12, alignment: .center)
-            .onReceive(timer) { _ in
-                phase = (phase + 1) % symbols.count
+            .onAppear {
+                animationTask = Task {
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .milliseconds(150))
+                        phase = (phase + 1) % symbols.count
+                    }
+                }
+            }
+            .onDisappear {
+                animationTask?.cancel()
+                animationTask = nil
             }
     }
 }
@@ -182,60 +199,63 @@ struct ReadyForInputIndicatorIcon: View {
     }
 }
 
-// MARK: - Sleep/Idle Icon (zZZ animation)
+// MARK: - Sleep/Idle Icon (Pixel-art zZZ with optional opacity animation)
 struct SleepIcon: View {
     let size: CGFloat
     let color: Color
+    var enableAnimation: Bool = true  // Can be disabled for specific contexts
 
-    @State private var zOffset: CGFloat = 0
-    @State private var opacity: Double = 0.6
+    @State private var breathOpacity: Double = 0.5
 
-    // #DDD6FE - light purple with more purple tone for dark background
+    // #DDD6FE - light purple
     private let lightPurple = Color(red: 221/255, green: 214/255, blue: 254/255)
 
-    init(size: CGFloat = 14, color: Color? = nil) {
+    init(size: CGFloat = 14, color: Color? = nil, enableAnimation: Bool = true) {
         self.size = size
         self.color = color ?? lightPurple
+        self.enableAnimation = enableAnimation
     }
 
-    private let timer = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
+    private func drawZzz(context: GraphicsContext, scale: CGFloat) {
+        // Draw "z" letters floating up with varying base opacity
+        let zPositions: [(CGFloat, CGFloat, CGFloat)] = [
+            (8, 20, 0.8),   // Bottom z - larger opacity
+            (14, 12, 0.6),  // Middle z - medium opacity
+            (20, 6, 0.4),   // Top z - smallest opacity
+        ]
+
+        for (x, y, alpha) in zPositions {
+            // Simple pixel-art "z" shape
+            let dots: [(CGFloat, CGFloat)] = [
+                (x - 3, y), (x, y), (x + 3, y),       // Top bar
+                (x, y - 3),                            // Diagonal
+                (x - 3, y - 6), (x, y - 6), (x + 3, y - 6), // Bottom bar
+            ]
+
+            for (dx, dy) in dots {
+                let rect = CGRect(
+                    x: dx * scale - 1.5 * scale,
+                    y: dy * scale - 1.5 * scale,
+                    width: 3 * scale,
+                    height: 3 * scale
+                )
+                context.fill(Path(rect), with: .color(color.opacity(alpha)))
+            }
+        }
+    }
 
     var body: some View {
         Canvas { context, canvasSize in
             let scale = size / 30.0
-
-            // Draw "z" letters floating up with opacity animation 0.6~1.0
-            let zPositions: [(CGFloat, CGFloat)] = [
-                (8, 20),   // Bottom z
-                (14, 12),  // Middle z
-                (20, 6),   // Top z
-            ]
-
-            for (x, y) in zPositions {
-                // Simple pixel-art "z" shape
-                let dots: [(CGFloat, CGFloat)] = [
-                    (x - 3, y), (x, y), (x + 3, y),       // Top bar
-                    (x, y - 3),                            // Diagonal
-                    (x - 3, y - 6), (x, y - 6), (x + 3, y - 6), // Bottom bar
-                ]
-
-                for (dx, dy) in dots {
-                    let rect = CGRect(
-                        x: dx * scale - 1.5 * scale,
-                        y: dy * scale - 1.5 * scale,
-                        width: 3 * scale,
-                        height: 3 * scale
-                    )
-                    context.fill(Path(rect), with: .color(color.opacity(opacity)))
-                }
-            }
+            drawZzz(context: context, scale: scale)
         }
         .frame(width: size, height: size)
-        .offset(y: zOffset)
-        .onReceive(timer) { _ in
-            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
-                zOffset = -2
-                opacity = 1.0
+        .opacity(enableAnimation ? breathOpacity : 0.7)
+        .onAppear {
+            if enableAnimation {
+                withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                    breathOpacity = 1.0
+                }
             }
         }
     }
@@ -356,8 +376,6 @@ struct SleepingCrabIcon: View {
     let sleepColor: Color
     var animateLegs: Bool = false
 
-    @State private var zOffset: CGFloat = 0
-
     // #DDD6FE - light purple with more purple tone for dark background
     private let purpleColor = Color(red: 221/255, green: 214/255, blue: 254/255)
 
@@ -368,23 +386,17 @@ struct SleepingCrabIcon: View {
         self.animateLegs = animateLegs
     }
 
-    private let timer = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
-
     var body: some View {
         ZStack(alignment: .topLeading) {
             // Main crab icon
             ClaudeCrabIcon(size: size, color: crabColor, animateLegs: animateLegs)
 
             // zZ floating above crab's head (top-right corner, shifted further right)
-            SleepIcon(size: size * 0.5, color: sleepColor)
+            // Static zzz for SleepingCrabIcon (no animation to reduce CPU)
+            SleepIcon(size: size * 0.5, color: sleepColor, enableAnimation: false)
                 .offset(x: size * 0.5, y: -size * 0.1)
         }
         .frame(width: size, height: size)
-        .onReceive(timer) { _ in
-            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
-                zOffset = -2
-            }
-        }
     }
 }
 

@@ -10,7 +10,8 @@ struct MinimalFaceFeatures: View {
     @State private var isBlinking = false
     @State var height:CGFloat = 20;
     @State var width:CGFloat = 30;
-    
+    @State private var blinkTask: Task<Void, Never>?
+
     var body: some View {
         VStack(spacing: 4) { // Adjusted spacing to fit within 30x30
             // Eyes
@@ -18,14 +19,14 @@ struct MinimalFaceFeatures: View {
                 Eye(isBlinking: $isBlinking)
                 Eye(isBlinking: $isBlinking)
             }
-            
+
             // Nose and mouth combined
             VStack(spacing: 2) { // Adjusted spacing to fit within 30x30
                 // Nose
                 RoundedRectangle(cornerRadius: 2)
                     .fill(Color.white)
                     .frame(width: 3, height: 4)
-                
+
                 // Mouth (happy)
                 GeometryReader { geometry in
                     Path { path in
@@ -41,20 +42,22 @@ struct MinimalFaceFeatures: View {
         }
         .frame(width: self.width, height: self.height) // Maximum size of face
         .onAppear {
-            startBlinking()
-        }
-    }
-    
-    func startBlinking() {
-        Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { _ in
-            withAnimation(.spring(duration: 0.2)) {
-                isBlinking = true
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                withAnimation(.spring(duration: 0.2)) {
-                    isBlinking = false
+            blinkTask = Task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(3))
+                    withAnimation(.spring(duration: 0.2)) {
+                        isBlinking = true
+                    }
+                    try? await Task.sleep(for: .milliseconds(100))
+                    withAnimation(.spring(duration: 0.2)) {
+                        isBlinking = false
+                    }
                 }
             }
+        }
+        .onDisappear {
+            blinkTask?.cancel()
+            blinkTask = nil
         }
     }
 }

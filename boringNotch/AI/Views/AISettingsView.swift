@@ -37,6 +37,10 @@ struct AISettingsView: View {
                     Text("Auto-install hooks on launch")
                 }
                 .disabled(!aiEnabled)
+                Defaults.Toggle(key: .aiSleepAnimationEnabled) {
+                    Text("Sleep icon animation")
+                }
+                .disabled(!aiEnabled)
             } header: {
                 Text("General")
             }

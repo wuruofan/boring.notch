@@ -206,4 +206,5 @@ extension Defaults.Keys {
     static let aiAutoInstallHooks = Key<Bool>("aiAutoInstallHooks", default: true)
     static let aiScreenMode = Key<AIScreenMode>("aiScreenMode", default: .followNotch)
     static let aiPreferredScreenUUID = Key<String?>("aiPreferredScreenUUID", default: nil)
+    static let aiSleepAnimationEnabled = Key<Bool>("aiSleepAnimationEnabled", default: true)
 }

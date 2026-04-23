@@ -1,21 +1,22 @@
 import SwiftUI
 
 /// Session list container with scroll support.
-/// Height adapts to session count (capped at 4):
-/// - 1 session: ~55px
-/// - 2 sessions: ~118px
-/// - 3 sessions: ~181px
-/// - 4 sessions: ~244px (max, scroll for more)
+/// Height adapts to session count (capped at 5).
 struct SessionList: View {
     @ObservedObject var aiManager = AIManager.shared
 
-    /// Calculate visible height based on session count (capped at 4)
-    /// Includes: SessionRow height (50px) + VStack spacing (6px per additional) + ScrollView padding (8px)
+    /// Calculate visible height based on session count (capped at 5)
+    /// SessionRow: 50px, spacing: 6px, padding: 16px (8px each side)
     private var visibleHeight: CGFloat {
         let sessionCount = aiManager.sortedSessions.count
-        let effectiveCount = min(sessionCount, 4)
-        // First session: 50px, each additional: 56px, plus ScrollView padding: 8px
-        return 50 + CGFloat(max(0, effectiveCount - 1)) * 56 + 8
+        let effectiveCount = min(sessionCount, 5)
+        let rowHeight: CGFloat = 50
+        let spacing: CGFloat = 6
+        let padding: CGFloat = 16
+
+        return CGFloat(effectiveCount) * rowHeight
+            + CGFloat(max(0, effectiveCount - 1)) * spacing
+            + padding
     }
 
     var body: some View {
@@ -29,11 +30,10 @@ struct SessionList: View {
                         ))
                 }
             }
-            .padding(.vertical, 4)
+            .padding(8)
         }
-        .frame(maxHeight: visibleHeight)
+        .frame(height: visibleHeight)
         .animation(.spring(response: 0.35, dampingFraction: 0.75), value: aiManager.sortedSessions.count)
-        // Remove default content margins to prevent extra scroll space
         .contentMargins(0, for: .scrollContent)
     }
 }
