@@ -576,9 +576,10 @@ class AIManager: ObservableObject {
             let timeout: TimeInterval
             switch session.phase {
             case .processing, .runningTool, .compacting:
-                // Darwin Notification handles cleanup via SessionEnd
-                // Only timeout if truly stale (5 minutes = zombie detection)
-                timeout = 300
+                // Real-time interrupt detection via Thread.polling JSONL watcher
+                // SessionEnd handles normal cleanup, ESC interrupt detected by Thread.polling
+                // Keep 10 min timeout for zombie detection (XPC Health Check: 30s × 3 failures = 90s)
+                timeout = 600  // 10 minutes zombie detection
             case .toolFailed:
                 timeout = 10  // Tool failed - short display then back to idle
             case .error:
