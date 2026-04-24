@@ -57,9 +57,9 @@ class AIHookServer {
         appendLog("AIHookServer.start() - path=\(Self.stateFileBasePath)\n")
 
         // Set up Darwin Notification callback for immediate response
-        AIXPCClient.shared.onStateUpdateDetected = { [weak self] in
+        AIXPCClient.shared.onStateUpdateDetected = { [weak self] changedSessionIds in
             Task {
-                await self?.pollStateFiles()
+                await self?.pollSpecificStateFiles(sessionIds: changedSessionIds)
             }
         }
 
@@ -103,15 +103,15 @@ class AIHookServer {
     private var isFirstPoll = true  // Track first poll after start
 
     private func startPolling() {
-        appendLog("startPolling: Starting event-driven polling with dynamic fallback\n")
+        appendLog("startPolling: Starting event-driven polling with 15s fallback\n")
         isFirstPoll = true  // Reset on start
         pollingTask = Task.detached { [weak self] in
             while !Task.isCancelled {
                 // Thread-safe read: use await MainActor.run to read @MainActor isolated property
                 let interval = await MainActor.run {
-                    self?.hasWaitingForApproval ?? false ? 1.0 : 5.0
+                    self?.hasWaitingForApproval ?? false ? 1.0 : 15.0  // 15s fallback, 1s for approval
                 }
-                await self?.pollStateFiles()
+                await self?.pollStateFiles()  // Full scan as fallback
                 try? await Task.sleep(for: .seconds(interval))
             }
             self?.appendLog("polling: Task cancelled\n")
@@ -149,6 +149,32 @@ class AIHookServer {
             }
             cleanupZombieFiles(files: stateFiles, basePath: basePath, activeSessionIds: activeSessionIds)
         }
+    }
+
+    /// Poll specific state files identified by Darwin Notification
+    /// This avoids scanning all files when we know which sessions changed
+    private func pollSpecificStateFiles(sessionIds: [String]) async {
+        let basePath = Self.stateFileBasePath
+
+        for sessionId in sessionIds {
+            let encodedId = Self.encodeSessionId(sessionId)
+            let fileName = "boringnotch-ai-state-" + encodedId + ".json"
+            let filePath = basePath + "/" + fileName
+
+            appendLog("pollSpecificStateFiles: Processing sessionId=\(sessionId.prefix(8)) encoded=\(encodedId.prefix(8))\n")
+            processStateFileWithDedup(path: filePath, fileName: fileName)
+        }
+    }
+
+    /// URL-safe base64 encoding for sessionId
+    /// NOTE: This duplicates AIHookServerCore.encodeSessionId because main app cannot access XPC Helper methods
+    static func encodeSessionId(_ sessionId: String) -> String {
+        let data = sessionId.data(using: .utf8) ?? Data()
+        let base64 = data.base64EncodedString()
+        return base64
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
     }
 
     private func processStateFileWithDedup(path: String, fileName: String) {

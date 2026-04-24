@@ -22,7 +22,8 @@ final class AIXPCClient {
     var onInterruptDetected: ((String) -> Void)?
 
     /// Callback when state file update is detected via Darwin Notification
-    var onStateUpdateDetected: (() -> Void)?
+    /// Parameters: changedSessionIds - list of sessionIds that have state changes
+    var onStateUpdateDetected: (([String]) -> Void)?
 
     deinit {
         connection?.invalidate()
@@ -120,13 +121,40 @@ final class AIXPCClient {
     }
 
     private func setupStateUpdateListener() {
+        // Clean up stale notification files from previous session (startup hygiene)
+        let notifyDir = "/tmp/boringnotch-notify"
+        if FileManager.default.fileExists(atPath: notifyDir) {
+            try? FileManager.default.removeItem(atPath: notifyDir)
+        }
+
         CFNotificationCenterAddObserver(
             CFNotificationCenterGetDarwinNotifyCenter(),
             nil,
             { center, observer, name, object, userInfo in
-                // Notify callback to scan state files
-                Task { @MainActor in
-                    AIXPCClient.shared.onStateUpdateDetected?()
+                // Read from dedicated notification directory (avoid scanning /tmp)
+                let notifyDir = "/tmp/boringnotch-notify"
+                guard let files = try? FileManager.default.contentsOfDirectory(atPath: notifyDir) else {
+                    return
+                }
+
+                // Filter stateupdate notification files
+                let notifyFiles = files.filter { $0.hasPrefix("stateupdate-") && $0.hasSuffix(".txt") }
+                var changedSessionIds: [String] = []
+
+                for fileName in notifyFiles {
+                    let filePath = notifyDir + "/" + fileName
+                    if let sessionId = try? String(contentsOfFile: filePath, encoding: .utf8), !sessionId.isEmpty {
+                        changedSessionIds.append(sessionId)
+                    }
+                    // Clean up notification file after reading
+                    try? FileManager.default.removeItem(atPath: filePath)
+                }
+
+                // Notify callback with changed sessionIds (if any)
+                if !changedSessionIds.isEmpty {
+                    Task { @MainActor in
+                        AIXPCClient.shared.onStateUpdateDetected?(changedSessionIds)
+                    }
                 }
             },
             kStateUpdateNotificationName as CFString,
@@ -134,7 +162,7 @@ final class AIXPCClient {
             CFNotificationSuspensionBehavior.deliverImmediately
         )
 
-        NSLog("AIXPCClient: Darwin notification listener set up for state updates")
+        NSLog("AIXPCClient: Darwin notification listener set up for state updates (dedicated directory, startup cleanup)")
     }
 
     // MARK: - Server Management
