@@ -10,6 +10,7 @@ class JSONLInterruptPollingThread {
     private let sessionId: String
     private let filePath: String
     private var lastOffset: UInt64 = 0  // NOTE: Only accessed within polling thread, no cross-thread access
+    private weak var helper: BoringNotchAIXPCHelper?  // Reference for callbacks
 
     /// Thread-safe isRunning access
     private var isRunning: Bool {
@@ -36,8 +37,9 @@ class JSONLInterruptPollingThread {
         "\"interrupted\":true"
     ]
 
-    init(sessionId: String, cwd: String) {
+    init(sessionId: String, cwd: String, helper: BoringNotchAIXPCHelper? = nil) {
         self.sessionId = sessionId
+        self.helper = helper
         // Convert cwd to project directory format: ~/.claude/projects/<cwd>/
         let projectDir = cwd
             .replacingOccurrences(of: "/", with: "-")
@@ -150,20 +152,9 @@ class JSONLInterruptPollingThread {
     }
 
     private func sendInterruptNotification() {
-        // Write session ID to a temp file for main app to read
-        // NOTE: Uses raw sessionId (not encoded) unlike stateupdate files which use encodedId.
-        // Reason: Main app reads file content directly, no need to parse filename for sessionId.
-        // This is intentional design difference - interrupt files are simpler (just sessionId content).
-        let notifyPath = "/tmp/boringnotch-interrupt-\(sessionId).txt"
-        try? sessionId.write(toFile: notifyPath, atomically: true, encoding: .utf8)
-
-        // Send Distributed notification
-        DistributedNotificationCenter.default().post(
-            name: Notification.Name("com.boringnotch.ai.interrupt"),
-            object: nil
-        )
-
-        NSLog("JSONLInterruptPollingThread: Sent interrupt notification for \(sessionId.prefix(8))")
+        // Send real-time callback via XPC protocol (penetrates sandbox boundary)
+        helper?.notifyInterrupt(sessionId: sessionId)
+        NSLog("JSONLInterruptPollingThread: Sent interrupt callback for \(sessionId.prefix(8)) via XPC listener")
 
         // Stop polling after interrupt detected (session will be cleaned up)
         isRunning = false
