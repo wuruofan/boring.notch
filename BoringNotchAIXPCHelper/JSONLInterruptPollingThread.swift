@@ -157,11 +157,10 @@ class JSONLInterruptPollingThread {
         let notifyPath = "/tmp/boringnotch-interrupt-\(sessionId).txt"
         try? sessionId.write(toFile: notifyPath, atomically: true, encoding: .utf8)
 
-        // Send Darwin notification
-        CFNotificationCenterPostNotification(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            CFNotificationName("com.boringnotch.ai.interrupt" as CFString),
-            nil, nil, true
+        // Send Distributed notification
+        DistributedNotificationCenter.default().post(
+            name: Notification.Name("com.boringnotch.ai.interrupt"),
+            object: nil
         )
 
         NSLog("JSONLInterruptPollingThread: Sent interrupt notification for \(sessionId.prefix(8))")

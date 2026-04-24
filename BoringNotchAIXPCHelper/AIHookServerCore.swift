@@ -341,12 +341,10 @@ class AIHookServerCore {
             let notifyPath = notifyDir + "/stateupdate-" + Self.encodeSessionId(sessionId) + "-" + String(timestamp) + ".txt"
             try? sessionId.write(toFile: notifyPath, atomically: true, encoding: .utf8)
 
-            // Send Darwin Notification to notify main app immediately
-            let notificationName = "com.boringnotch.ai.stateupdate" as CFString
-            CFNotificationCenterPostNotification(
-                CFNotificationCenterGetDarwinNotifyCenter(),
-                CFNotificationName(notificationName),
-                nil, nil, true
+            // Send Distributed Notification to notify main app immediately
+            DistributedNotificationCenter.default().post(
+                name: Notification.Name("com.boringnotch.ai.stateupdate"),
+                object: nil
             )
             NSLog("AIHookServerCore: Sent stateupdate notification for \(sessionId.prefix(8)), notifyPath=\(notifyPath)")
         }

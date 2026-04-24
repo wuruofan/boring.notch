@@ -27,12 +27,6 @@ final class AIXPCClient {
 
     deinit {
         connection?.invalidate()
-        CFNotificationCenterRemoveObserver(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            nil,
-            nil,
-            nil
-        )
     }
 
     // MARK: - Connection Management
@@ -78,13 +72,14 @@ final class AIXPCClient {
         return service
     }
 
-    // MARK: - Darwin Notification Listener
+    // MARK: - Distributed Notification Listener
 
     private func setupDarwinNotificationListener() {
-        CFNotificationCenterAddObserver(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            nil,
-            { center, observer, name, object, userInfo in
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name(kInterruptNotificationName),
+            object: nil,
+            queue: nil,
+            using: { notification in
                 // Read interrupt files from /tmp
                 let tmpPath = "/tmp"
                 guard let files = try? FileManager.default.contentsOfDirectory(atPath: tmpPath) else {
@@ -111,13 +106,10 @@ final class AIXPCClient {
                         }
                     }
                 }
-            },
-            kInterruptNotificationName as CFString,
-            nil,
-            CFNotificationSuspensionBehavior.deliverImmediately
+            }
         )
 
-        NSLog("AIXPCClient: Darwin notification listener set up for interrupts")
+        NSLog("AIXPCClient: Distributed notification listener set up for interrupts")
     }
 
     private func setupStateUpdateListener() {
@@ -127,13 +119,16 @@ final class AIXPCClient {
             try? FileManager.default.removeItem(atPath: notifyDir)
         }
 
-        CFNotificationCenterAddObserver(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            nil,
-            { center, observer, name, object, userInfo in
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name(kStateUpdateNotificationName),
+            object: nil,
+            queue: nil,
+            using: { notification in
+                NSLog("AIXPCClient: Distributed notification received for stateupdate")
                 // Read from dedicated notification directory (avoid scanning /tmp)
                 let notifyDir = "/tmp/boringnotch-notify"
                 guard let files = try? FileManager.default.contentsOfDirectory(atPath: notifyDir) else {
+                    NSLog("AIXPCClient: Cannot read notify directory")
                     return
                 }
 
@@ -151,27 +146,24 @@ final class AIXPCClient {
                 }
 
                 // Notify callback with changed sessionIds (if any)
+                NSLog("AIXPCClient: Found \(changedSessionIds.count) sessionIds, calling callback")
                 if !changedSessionIds.isEmpty {
                     Task { @MainActor in
+                        NSLog("AIXPCClient: Dispatching onStateUpdateDetected callback")
                         AIXPCClient.shared.onStateUpdateDetected?(changedSessionIds)
                     }
                 }
-            },
-            kStateUpdateNotificationName as CFString,
-            nil,
-            CFNotificationSuspensionBehavior.deliverImmediately
+            }
         )
 
-        NSLog("AIXPCClient: Darwin notification listener set up for state updates (dedicated directory, startup cleanup)")
+        NSLog("AIXPCClient: Distributed notification listener set up for state updates (dedicated directory, startup cleanup)")
     }
 
     // MARK: - Server Management
 
     nonisolated func startServer() async -> Bool {
-        NSLog("AIXPCClient.startServer() called")
         do {
             let service = await MainActor.run {
-                NSLog("AIXPCClient: Creating NSXPCConnection for \(serviceName)")
                 return ensureRemoteService()
             }
             NSLog("AIXPCClient: Connection created, calling remote startServer()")
