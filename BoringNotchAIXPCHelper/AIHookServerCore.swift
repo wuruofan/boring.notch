@@ -15,6 +15,9 @@ class AIHookServerCore {
     private var isRunning: Bool = false
     private let queue = DispatchQueue(label: "com.boringnotch.ai.socket", qos: .userInitiated)
 
+    /// Reference to XPC Helper for sending callbacks
+    weak var helper: BoringNotchAIXPCHelper?
+
     private var pendingPermissions: [String: PendingPermission] = [:]
     private let permissionsLock = NSLock()
 
@@ -333,20 +336,10 @@ class AIHookServerCore {
 
             NSLog("AIHookServerCore: Wrote event \(event) inode: before=\(beforeInode ?? -1) after=\(afterInode ?? -1) changed=\(beforeInode != afterInode)")
 
-            // Write sessionId to dedicated notification directory (avoid scanning /tmp)
-            // Use timestamp in filename to avoid race conditions with multiple rapid notifications
-            let notifyDir = "/tmp/boringnotch-notify"
-            try? FileManager.default.createDirectory(atPath: notifyDir, withIntermediateDirectories: true)
-            let timestamp = Int(Date().timeIntervalSince1970 * 1000)  // milliseconds
-            let notifyPath = notifyDir + "/stateupdate-" + Self.encodeSessionId(sessionId) + "-" + String(timestamp) + ".txt"
-            try? sessionId.write(toFile: notifyPath, atomically: true, encoding: .utf8)
-
-            // Send Distributed Notification to notify main app immediately
-            DistributedNotificationCenter.default().post(
-                name: Notification.Name("com.boringnotch.ai.stateupdate"),
-                object: nil
-            )
-            NSLog("AIHookServerCore: Sent stateupdate notification for \(sessionId.prefix(8)), notifyPath=\(notifyPath)")
+            // Send real-time callback via XPC protocol (penetrates sandbox boundary)
+            // No need for file/notification mechanism anymore
+            helper?.notifyStateUpdate(sessionIds: [sessionId])
+            NSLog("AIHookServerCore: Sent stateupdate callback for \(sessionId.prefix(8)) via XPC listener")
         }
 
         // Cache tool_use_id from PreToolUse
