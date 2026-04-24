@@ -17,6 +17,7 @@ class BoringNotchAIXPCHelper: NSObject, BoringNotchAIXPCHelperProtocol {
         }
 
         let server = AIHookServerCore()
+        server.helper = self  // Set helper reference for callbacks
         NSLog("BoringNotchAIXPCHelper: created AIHookServerCore, calling start()")
         server.start()
         hookServer = server
@@ -111,7 +112,13 @@ class BoringNotchAIXPCHelper: NSObject, BoringNotchAIXPCHelperProtocol {
     /// Store connection reference to access remoteObjectProxy (main app's listener)
     func setConnection(_ conn: NSXPCConnection) {
         connection = conn
-        NSLog("BoringNotchAIXPCHelper: Connection stored")
+        NSLog("BoringNotchAIXPCHelper: Connection stored, remoteObjectInterface set")
+
+        // Set helper reference chain for callbacks
+        InterruptWatcherManagerCore.shared.setHelper(self)
+        NSLog("BoringNotchAIXPCHelper: Helper reference chain set for InterruptWatcherManager")
+
+        // Set helper reference for HookServer (will be set when server starts)
     }
 
     /// Get listener proxy from main app
