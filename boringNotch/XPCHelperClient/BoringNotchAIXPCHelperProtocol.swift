@@ -1,5 +1,17 @@
 import Foundation
 
+/// Listener protocol for receiving callbacks from XPC Helper.
+/// This allows the main app (sandboxed) to receive real-time events from XPC Helper (unsandboxed)
+/// via XPC protocol callbacks, which naturally penetrate the sandbox boundary.
+@objc protocol AIXPCEventListener {
+    /// Called when state file is updated for specific sessions
+    func onStateUpdate(sessionIds: [String])
+    /// Called when ESC interrupt is detected for a session
+    func onInterrupt(sessionId: String)
+    /// Ping for connectivity test (minimal verification)
+    func ping()
+}
+
 /// Protocol for the AI XPC Helper service.
 /// The helper runs outside the sandbox and manages the Unix Domain Socket server
 /// and JSONL interrupt watchers.
@@ -45,4 +57,10 @@ import Foundation
     /// Run a shell command (open, etc.)
     /// Returns (success: Bool, output: String)
     func runShellCommand(command: String, with reply: @escaping (Bool, String) -> Void)
+
+    // MARK: - Test Callback (for verification)
+
+    /// Test XPC callback by sending ping to main app's listener.
+    /// XPC Helper gets listener via remoteObjectProxy and calls listener.ping()
+    func testPing(with reply: @escaping (Bool) -> Void)
 }
