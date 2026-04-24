@@ -460,86 +460,12 @@ git commit -m "feat(xpc): set helper reference chain for HookServer and Interrup
 
 ---
 
-## Task 6: AIXPCClient 移除 DistributedNotification 监听，使用 listener 回调
-
-**Files:**
-- Modify: `boringNotch/XPCHelperClient/AIXPCClient.swift`
-
-**现状：** 主 App 监听 DistributedNotification 并读取文件，无法实时响应。
-
-- [ ] **Step 1: 移除 DistributedNotification 监听代码**
-
-删除以下两个方法：
-- `setupDarwinNotificationListener()` - 监听 interrupt
-- `setupStateUpdateListener()` - 监听 stateupdate
-
-在 `ensureRemoteService()` 方法中，删除调用这两个方法的代码：
-
-```swift
-// Set up Darwin Notification listener for interrupts
-setupDarwinNotificationListener()
-
-// Set up Darwin Notification listener for state updates
-setupStateUpdateListener()
-```
-
-改为：
-
-```swift
-// Listener is set externally via setListener(), no setup needed here
-```
-
-- [ ] **Step 2: 确保 exportedObject 设置正确**
-
-确认 `ensureRemoteService()` 中已正确设置 exportedObject（之前验证已实现）：
-
-```swift
-// Set up exported interface for receiving callbacks from XPC Helper
-conn.exportedInterface = NSXPCInterface(with: AIXPCEventListener.self)
-conn.exportedObject = listener
-```
-
-- [ ] **Step 3: 删除无用的常量和属性定义**
-
-删除文件开头的常量（不再需要）：
-
-```swift
-/// Darwin notification name for interrupt detection
-let kInterruptNotificationName = "com.boringnotch.ai.interrupt"
-
-/// Darwin notification name for state file updates
-let kStateUpdateNotificationName = "com.boringnotch.ai.stateupdate"
-```
-
-删除类中的回调属性（不再使用）：
-
-```swift
-/// Callback when interrupt is detected via Darwin Notification
-var onInterruptDetected: ((String) -> Void)?
-
-/// Callback when state file update is detected via Darwin Notification
-/// Parameters: changedSessionIds - list of sessionIds that have state changes
-var onStateUpdateDetected: (([String]) -> Void)?
-```
-
-- [ ] **Step 4: 验证编译**
-
-Run: `xcodebuild -scheme boringNotch -configuration Debug build 2>&1 | tail -20`
-Expected: BUILD SUCCEEDED
-
-- [ ] **Step 5: 提交**
-
-```bash
-git add boringNotch/XPCHelperClient/AIXPCClient.swift
-git commit -m "feat(xpc-client): remove DistributedNotification listeners, use XPC callbacks"
-```
-
----
-
-## Task 7: AIHookServer 使用 listener 回调触发状态更新
+## Task 6: AIHookServer 先集成 AIXPCListener（依赖前置）
 
 **Files:**
 - Modify: `boringNotch/AI/AIHookServer.swift`
+
+**重要：** 此任务必须在 Task 7（删除 DistributedNotification）之前执行，否则回调属性失效。
 
 **现状：** 设置 `onStateUpdateDetected` 回调等待通知触发，改为直接处理 listener 回调。
 
@@ -583,9 +509,8 @@ AIXPCClient.shared.setListener(listener)
 private func handleInterrupt(sessionId: String) async {
     appendLog("handleInterrupt: Received interrupt for \(sessionId.prefix(8))\n")
 
-    // Mark session as interrupted (will transition to idle)
+    // Post notification for AIManager to handle
     await MainActor.run {
-        // Notify AIManager to update state
         NotificationCenter.default.post(
             name: .AIInterruptDetected,
             object: nil,
@@ -604,7 +529,83 @@ Expected: BUILD SUCCEEDED
 
 ```bash
 git add boringNotch/AI/AIHookServer.swift
-git commit -m "feat(ai-hookserver): use XPC listener callbacks instead of DistributedNotification"
+git commit -m "feat(ai-hookserver): integrate AIXPCListener for callbacks (before removing DistributedNotification)"
+```
+
+---
+
+## Task 7: AIXPCClient 删除 DistributedNotification 监听和旧回调属性
+
+**Files:**
+- Modify: `boringNotch/XPCHelperClient/AIXPCClient.swift`
+
+**前置条件：** Task 6 已完成，AIXPCListener 已集成。
+
+- [ ] **Step 1: 移除 DistributedNotification 监听代码**
+
+删除以下两个方法：
+- `setupDarwinNotificationListener()` - 监听 interrupt
+- `setupStateUpdateListener()` - 监听 stateupdate
+
+在 `ensureRemoteService()` 方法中，删除调用这两个方法的代码：
+
+```swift
+// Set up Darwin Notification listener for interrupts
+setupDarwinNotificationListener()
+
+// Set up Darwin Notification listener for state updates
+setupStateUpdateListener()
+```
+
+改为：
+
+```swift
+// Listener is set externally via setListener(), callbacks handled by AIXPCListener
+```
+
+- [ ] **Step 2: 删除旧回调属性（不再使用）**
+
+删除类中的回调属性：
+
+```swift
+/// Callback when interrupt is detected via Darwin Notification
+var onInterruptDetected: ((String) -> Void)?
+
+/// Callback when state file update is detected via Darwin Notification
+var onStateUpdateDetected: (([String]) -> Void)?
+```
+
+- [ ] **Step 3: 删除无用常量**
+
+删除文件开头的常量：
+
+```swift
+/// Darwin notification name for interrupt detection
+let kInterruptNotificationName = "com.boringnotch.ai.interrupt"
+
+/// Darwin notification name for state file updates
+let kStateUpdateNotificationName = "com.boringnotch.ai.stateupdate"
+```
+
+- [ ] **Step 4: 确保 exportedObject 设置正确**
+
+确认 `ensureRemoteService()` 中已正确设置（之前验证已实现）：
+
+```swift
+conn.exportedInterface = NSXPCInterface(with: AIXPCEventListener.self)
+conn.exportedObject = listener
+```
+
+- [ ] **Step 5: 验证编译**
+
+Run: `xcodebuild -scheme boringNotch -configuration Debug build 2>&1 | tail -20`
+Expected: BUILD SUCCEEDED
+
+- [ ] **Step 6: 提交**
+
+```bash
+git add boringNotch/XPCHelperClient/AIXPCClient.swift
+git commit -m "feat(xpc-client): remove DistributedNotification listeners and old callback properties"
 ```
 
 ---
