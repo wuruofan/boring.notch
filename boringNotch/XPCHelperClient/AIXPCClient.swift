@@ -254,7 +254,13 @@ final class AIXPCClient {
     @MainActor
     func setListener(_ listener: AIXPCListener) {
         self.listener = listener
-        NSLog("AIXPCClient: Listener set as exportedObject")
+        // Update exportedObject if connection already exists
+        if let conn = connection {
+            conn.exportedObject = listener
+            NSLog("AIXPCClient: Listener set and exportedObject updated on existing connection")
+        } else {
+            NSLog("AIXPCClient: Listener set, will be applied when connection is created")
+        }
     }
 
     /// Test listener connectivity by asking XPC Helper to ping the listener.
