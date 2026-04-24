@@ -116,12 +116,16 @@ class AIManager: ObservableObject {
             }
         }
 
-        // Set up XPC interrupt detection callback
-        AIXPCClient.shared.onInterruptDetected = { [weak self] sessionId in
-            Task { @MainActor in
+        // Listen for interrupt notifications from HookServer (via XPC callbacks)
+        NotificationCenter.default.addObserver(
+            forName: .AIInterruptDetected,
+            object: nil,
+            queue: .main,
+            using: { [weak self] notification in
+                guard let sessionId = notification.userInfo?["sessionId"] as? String else { return }
                 self?.handleXPCInterrupt(sessionId: sessionId)
             }
-        }
+        )
     }
 
     // MARK: - Lifecycle

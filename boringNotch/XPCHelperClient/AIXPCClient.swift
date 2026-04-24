@@ -1,12 +1,6 @@
 import AsyncXPCConnection
 import Foundation
 
-/// Darwin notification name for interrupt detection
-let kInterruptNotificationName = "com.boringnotch.ai.interrupt"
-
-/// Darwin notification name for state file updates
-let kStateUpdateNotificationName = "com.boringnotch.ai.stateupdate"
-
 /// Client for the AI XPC Helper service.
 /// Connects to the unsandboxed helper to manage the socket server,
 /// JSONL interrupt watchers, and reads state files for event data.
@@ -15,15 +9,16 @@ final class AIXPCClient {
 
     private let serviceName = "theboringteam.boringnotch.BoringNotchAIXPCHelper"
 
+    /// Caches directory path for debug files (sandbox container)
+    private static let cachesPath: String = {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.path ?? ""
+    }()
+
     private var remoteService: RemoteXPCService<BoringNotchAIXPCHelperProtocol>?
     private var connection: NSXPCConnection?
 
-    /// Callback when interrupt is detected via Darwin Notification
-    var onInterruptDetected: ((String) -> Void)?
-
-    /// Callback when state file update is detected via Darwin Notification
-    /// Parameters: changedSessionIds - list of sessionIds that have state changes
-    var onStateUpdateDetected: (([String]) -> Void)?
+    /// Listener object for receiving XPC callbacks
+    private var listener: AIXPCListener?
 
     deinit {
         connection?.invalidate()
@@ -33,11 +28,22 @@ final class AIXPCClient {
 
     @MainActor
     private func ensureRemoteService() -> RemoteXPCService<BoringNotchAIXPCHelperProtocol> {
+        // Write entry marker for debugging (sandbox container path)
+        let entryMarker = Self.cachesPath + "/boringnotch-ensureRemoteService-entry.txt"
+        try? "ensureRemoteService called at \(Date())".write(toFile: entryMarker, atomically: true, encoding: .utf8)
+
         if let existing = remoteService {
+            // Write early return marker
+            let earlyReturnMarker = Self.cachesPath + "/boringnotch-ensureRemoteService-early-return.txt"
+            try? "Returning early, remoteService already exists at \(Date())".write(toFile: earlyReturnMarker, atomically: true, encoding: .utf8)
             return existing
         }
 
         let conn = NSXPCConnection(serviceName: serviceName)
+
+        // Set up exported interface for receiving callbacks from XPC Helper
+        conn.exportedInterface = NSXPCInterface(with: AIXPCEventListener.self)
+        conn.exportedObject = listener
 
         conn.interruptionHandler = { [weak self] in
             Task { @MainActor in
@@ -63,107 +69,18 @@ final class AIXPCClient {
         connection = conn
         remoteService = service
 
-        // Set up Darwin Notification listener for interrupts
-        setupDarwinNotificationListener()
-
-        // Set up Darwin Notification listener for state updates
-        setupStateUpdateListener()
+        // Listener is set externally via setListener(), callbacks handled by AIXPCListener
 
         return service
-    }
-
-    // MARK: - Distributed Notification Listener
-
-    private func setupDarwinNotificationListener() {
-        DistributedNotificationCenter.default().addObserver(
-            forName: Notification.Name(kInterruptNotificationName),
-            object: nil,
-            queue: nil,
-            using: { notification in
-                // Read interrupt files from /tmp
-                let tmpPath = "/tmp"
-                guard let files = try? FileManager.default.contentsOfDirectory(atPath: tmpPath) else {
-                    return
-                }
-
-                let interruptFiles = files.filter { $0.hasPrefix("boringnotch-interrupt-") && $0.hasSuffix(".txt") }
-                for fileName in interruptFiles {
-                    let filePath = tmpPath + "/" + fileName
-                    // Extract session ID from filename
-                    let sessionId = fileName
-                        .replacingOccurrences(of: "boringnotch-interrupt-", with: "")
-                        .replacingOccurrences(of: ".txt", with: "")
-
-                    // Read and clean up
-                    if let content = try? String(contentsOfFile: filePath),
-                       content == sessionId {
-                        // Clean up the file
-                        try? FileManager.default.removeItem(atPath: filePath)
-
-                        // Notify callback
-                        Task { @MainActor in
-                            AIXPCClient.shared.onInterruptDetected?(sessionId)
-                        }
-                    }
-                }
-            }
-        )
-
-        NSLog("AIXPCClient: Distributed notification listener set up for interrupts")
-    }
-
-    private func setupStateUpdateListener() {
-        // Clean up stale notification files from previous session (startup hygiene)
-        let notifyDir = "/tmp/boringnotch-notify"
-        if FileManager.default.fileExists(atPath: notifyDir) {
-            try? FileManager.default.removeItem(atPath: notifyDir)
-        }
-
-        DistributedNotificationCenter.default().addObserver(
-            forName: Notification.Name(kStateUpdateNotificationName),
-            object: nil,
-            queue: nil,
-            using: { notification in
-                NSLog("AIXPCClient: Distributed notification received for stateupdate")
-                // Read from dedicated notification directory (avoid scanning /tmp)
-                let notifyDir = "/tmp/boringnotch-notify"
-                guard let files = try? FileManager.default.contentsOfDirectory(atPath: notifyDir) else {
-                    NSLog("AIXPCClient: Cannot read notify directory")
-                    return
-                }
-
-                // Filter stateupdate notification files
-                let notifyFiles = files.filter { $0.hasPrefix("stateupdate-") && $0.hasSuffix(".txt") }
-                var changedSessionIds: [String] = []
-
-                for fileName in notifyFiles {
-                    let filePath = notifyDir + "/" + fileName
-                    if let sessionId = try? String(contentsOfFile: filePath, encoding: .utf8), !sessionId.isEmpty {
-                        changedSessionIds.append(sessionId)
-                    }
-                    // Clean up notification file after reading
-                    try? FileManager.default.removeItem(atPath: filePath)
-                }
-
-                // Notify callback with changed sessionIds (if any)
-                NSLog("AIXPCClient: Found \(changedSessionIds.count) sessionIds, calling callback")
-                if !changedSessionIds.isEmpty {
-                    Task { @MainActor in
-                        NSLog("AIXPCClient: Dispatching onStateUpdateDetected callback")
-                        AIXPCClient.shared.onStateUpdateDetected?(changedSessionIds)
-                    }
-                }
-            }
-        )
-
-        NSLog("AIXPCClient: Distributed notification listener set up for state updates (dedicated directory, startup cleanup)")
     }
 
     // MARK: - Server Management
 
     nonisolated func startServer() async -> Bool {
+        NSLog("AIXPCClient.startServer() called - about to call ensureRemoteService")
         do {
             let service = await MainActor.run {
+                NSLog("AIXPCClient: Inside MainActor.run, calling ensureRemoteService")
                 return ensureRemoteService()
             }
             NSLog("AIXPCClient: Connection created, calling remote startServer()")
@@ -328,5 +245,60 @@ final class AIXPCClient {
             NSLog("AIXPCClient: runShellCommand failed: \(error)")
             return (false, error.localizedDescription)
         }
+    }
+
+    // MARK: - Listener Registration (for real-time callbacks)
+
+    /// Set the listener for receiving XPC callbacks.
+    /// The listener is set as exportedObject, XPC Helper gets it via remoteObjectProxy.
+    @MainActor
+    func setListener(_ listener: AIXPCListener) {
+        self.listener = listener
+        NSLog("AIXPCClient: Listener set as exportedObject")
+    }
+
+    /// Test listener connectivity by asking XPC Helper to ping the listener.
+    nonisolated func testPing() async -> Bool {
+        do {
+            let service = await MainActor.run { ensureRemoteService() }
+            return try await service.withContinuation { service, continuation in
+                service.testPing { success in
+                    NSLog("AIXPCClient: testPing returned \(success)")
+                    continuation.resume(returning: success)
+                }
+            }
+        } catch {
+            NSLog("AIXPCClient: testPing failed: \(error)")
+            return false
+        }
+    }
+}
+
+/// Listener implementation for receiving XPC callbacks.
+/// This class receives real-time events from XPC Helper via XPC protocol callbacks.
+class AIXPCListener: NSObject, AIXPCEventListener {
+
+    /// Callback when ping is received (for verification)
+    var onPingReceived: (() -> Void)?
+
+    /// Callback when state update is received
+    var onStateUpdateReceived: (([String]) -> Void)?
+
+    /// Callback when interrupt is received
+    var onInterruptReceived: ((String) -> Void)?
+
+    func ping() {
+        NSLog("AIXPCListener: ping() received!")
+        onPingReceived?()
+    }
+
+    func onStateUpdate(sessionIds: [String]) {
+        NSLog("AIXPCListener: onStateUpdate received with \(sessionIds.count) sessions")
+        onStateUpdateReceived?(sessionIds)
+    }
+
+    func onInterrupt(sessionId: String) {
+        NSLog("AIXPCListener: onInterrupt received for \(sessionId.prefix(8))")
+        onInterruptReceived?(sessionId)
     }
 }
