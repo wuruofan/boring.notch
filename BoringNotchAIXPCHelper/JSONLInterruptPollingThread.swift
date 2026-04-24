@@ -51,11 +51,13 @@ class JSONLInterruptPollingThread {
 
     func start() {
         isRunning = true
-        pollingThread = Thread { [weak self] in
-            self?.runPollingLoop()
+        // NOTE: Don't use [weak self] here - watcher is retained by InterruptWatcherManagerCore
+        // If self becomes nil, polling loop won't run
+        pollingThread = Thread {
+            self.runPollingLoop()
         }
         pollingThread?.start()
-        NSLog("JSONLInterruptPollingThread: Started polling for \(sessionId.prefix(8))")
+        NSLog("JSONLInterruptPollingThread: Started polling for \(sessionId.prefix(8)), filePath=\(filePath)")
     }
 
     func stop() {
