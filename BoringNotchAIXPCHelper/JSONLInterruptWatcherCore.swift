@@ -12,8 +12,14 @@ class InterruptWatcherManagerCore {
 
     private var watchers: [String: JSONLInterruptPollingThread] = [:]
     private let lock = NSLock()
+    private weak var helper: BoringNotchAIXPCHelper?  // Reference for callbacks
 
     private init() {}
+
+    /// Set helper reference for callbacks
+    func setHelper(_ helper: BoringNotchAIXPCHelper) {
+        self.helper = helper
+    }
 
     func startWatching(sessionId: String, cwd: String) -> Bool {
         lock.lock()
@@ -24,7 +30,7 @@ class InterruptWatcherManagerCore {
             return true
         }
 
-        let watcher = JSONLInterruptPollingThread(sessionId: sessionId, cwd: cwd)
+        let watcher = JSONLInterruptPollingThread(sessionId: sessionId, cwd: cwd, helper: helper)
         watcher.start()
         watchers[sessionId] = watcher
 
