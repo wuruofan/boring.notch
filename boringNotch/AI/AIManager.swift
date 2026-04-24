@@ -7,6 +7,7 @@ import SwiftUI
 
 extension Notification.Name {
     static let AIWaitingForApprovalChanged = Notification.Name("AIWaitingForApprovalChanged")
+    static let AIInterruptDetected = Notification.Name("com.boringnotch.ai.interrupt.detected")
 }
 
 @MainActor
@@ -127,6 +128,17 @@ class AIManager: ObservableObject {
 
     func start() {
         appendAILog("AIManager.start() called, aiEnabled=\(Defaults[.aiEnabled])\n")
+
+        // Test file write permission to sandbox container (Caches directory)
+        let cachesPath = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.path ?? ""
+        let testFile = cachesPath + "/boringnotch-aimanager-test.txt"
+        do {
+            try "Test from AIManager at \(Date())".write(toFile: testFile, atomically: true, encoding: .utf8)
+            appendAILog("AIManager: Successfully wrote test file to \(testFile)\n")
+        } catch {
+            appendAILog("AIManager: FAILED to write test file: \(error)\n")
+        }
+
         guard Defaults[.aiEnabled] else {
             appendAILog("AIManager: Skipping start - AI disabled\n")
             return

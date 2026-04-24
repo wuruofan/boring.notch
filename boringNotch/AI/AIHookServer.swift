@@ -56,11 +56,20 @@ class AIHookServer {
     func start() {
         appendLog("AIHookServer.start() - path=\(Self.stateFileBasePath)\n")
 
-        // Set up Darwin Notification callback for immediate response
-        AIXPCClient.shared.onStateUpdateDetected = { [weak self] changedSessionIds in
-            Task {
-                await self?.pollSpecificStateFiles(sessionIds: changedSessionIds)
+        // Set up listener for XPC callbacks (real-time, penetrates sandbox)
+        Task { @MainActor [weak self] in
+            let listener = AIXPCListener()
+            listener.onStateUpdateReceived = { sessionIds in
+                Task {
+                    await self?.pollSpecificStateFiles(sessionIds: sessionIds)
+                }
             }
+            listener.onInterruptReceived = { sessionId in
+                Task {
+                    await self?.handleInterrupt(sessionId: sessionId)
+                }
+            }
+            AIXPCClient.shared.setListener(listener)
         }
 
         // Observe AIManager for waitingForApproval state changes
@@ -84,8 +93,7 @@ class AIHookServer {
         pollingTask = nil
         notificationObserverTask?.cancel()
         notificationObserverTask = nil
-        AIXPCClient.shared.onStateUpdateDetected = nil
-        appendLog("AIHookServer.stop() - polling stopped, tasks cancelled, callback cleared\n")
+        appendLog("AIHookServer.stop() - polling stopped, tasks cancelled\n")
     }
 
     func hasPendingPermission(sessionId: String) async -> Bool {
@@ -292,5 +300,19 @@ class AIHookServer {
 
         appendLog("processStateFile: event=\(event.event) status=\(event.status), calling onEvent\n")
         onEvent?(event)
+    }
+
+    /// Handle interrupt callback from XPC Helper
+    private func handleInterrupt(sessionId: String) async {
+        appendLog("handleInterrupt: Received interrupt for \(sessionId.prefix(8))\n")
+
+        // Post notification for AIManager to handle
+        await MainActor.run {
+            NotificationCenter.default.post(
+                name: .AIInterruptDetected,
+                object: nil,
+                userInfo: ["sessionId": sessionId]
+            )
+        }
     }
 }
