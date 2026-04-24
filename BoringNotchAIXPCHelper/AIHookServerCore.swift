@@ -333,6 +333,14 @@ class AIHookServerCore {
 
             NSLog("AIHookServerCore: Wrote event \(event) inode: before=\(beforeInode ?? -1) after=\(afterInode ?? -1) changed=\(beforeInode != afterInode)")
 
+            // Write sessionId to dedicated notification directory (avoid scanning /tmp)
+            // Use timestamp in filename to avoid race conditions with multiple rapid notifications
+            let notifyDir = "/tmp/boringnotch-notify"
+            try? FileManager.default.createDirectory(atPath: notifyDir, withIntermediateDirectories: true)
+            let timestamp = Int(Date().timeIntervalSince1970 * 1000)  // milliseconds
+            let notifyPath = notifyDir + "/stateupdate-" + Self.encodeSessionId(sessionId) + "-" + String(timestamp) + ".txt"
+            try? sessionId.write(toFile: notifyPath, atomically: true, encoding: .utf8)
+
             // Send Darwin Notification to notify main app immediately
             let notificationName = "com.boringnotch.ai.stateupdate" as CFString
             CFNotificationCenterPostNotification(
@@ -340,7 +348,7 @@ class AIHookServerCore {
                 CFNotificationName(notificationName),
                 nil, nil, true
             )
-            NSLog("AIHookServerCore: Sent stateupdate notification for \(sessionId.prefix(8))")
+            NSLog("AIHookServerCore: Sent stateupdate notification for \(sessionId.prefix(8)), notifyPath=\(notifyPath)")
         }
 
         // Cache tool_use_id from PreToolUse
