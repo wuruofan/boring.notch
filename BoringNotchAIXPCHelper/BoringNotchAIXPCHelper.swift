@@ -6,6 +6,7 @@ import Foundation
 class BoringNotchAIXPCHelper: NSObject, BoringNotchAIXPCHelperProtocol {
 
     private var hookServer: AIHookServerCore?
+    private var connection: NSXPCConnection?
 
     func startServer(with reply: @escaping (Bool) -> Void) {
         NSLog("BoringNotchAIXPCHelper: startServer called")
@@ -103,5 +104,60 @@ class BoringNotchAIXPCHelper: NSObject, BoringNotchAIXPCHelperProtocol {
         } catch {
             reply(false, error.localizedDescription)
         }
+    }
+
+    // MARK: - Connection Management
+
+    /// Store connection reference to access remoteObjectProxy (main app's listener)
+    func setConnection(_ conn: NSXPCConnection) {
+        connection = conn
+        NSLog("BoringNotchAIXPCHelper: Connection stored")
+    }
+
+    /// Get listener proxy from main app
+    private func getListener() -> AIXPCEventListener? {
+        guard let connection else {
+            NSLog("BoringNotchAIXPCHelper: No connection available")
+            return nil
+        }
+
+        let listener = connection.remoteObjectProxyWithErrorHandler { error in
+            NSLog("BoringNotchAIXPCHelper: Listener error: \(error)")
+        } as? AIXPCEventListener
+
+        return listener
+    }
+
+    // MARK: - Real-time Callbacks
+
+    /// Send state update callback to main app
+    func notifyStateUpdate(sessionIds: [String]) {
+        guard let listener = getListener() else { return }
+        NSLog("BoringNotchAIXPCHelper: Calling listener.onStateUpdate with \(sessionIds.count) sessions")
+        listener.onStateUpdate(sessionIds: sessionIds)
+    }
+
+    /// Send interrupt callback to main app
+    func notifyInterrupt(sessionId: String) {
+        guard let listener = getListener() else { return }
+        NSLog("BoringNotchAIXPCHelper: Calling listener.onInterrupt for \(sessionId.prefix(8))")
+        listener.onInterrupt(sessionId: sessionId)
+    }
+
+    // MARK: - Test Methods (for verification)
+
+    /// Test callback by sending ping to main app's listener (XPC Protocol method)
+    func testPing(with reply: @escaping (Bool) -> Void) {
+        NSLog("BoringNotchAIXPCHelper: testPing called")
+        guard let listener = getListener() else {
+            NSLog("BoringNotchAIXPCHelper: No listener available")
+            reply(false)
+            return
+        }
+
+        NSLog("BoringNotchAIXPCHelper: Sending ping to listener...")
+        listener.ping()
+        reply(true)
+        NSLog("BoringNotchAIXPCHelper: Ping sent")
     }
 }
