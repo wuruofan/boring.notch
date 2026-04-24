@@ -22,6 +22,7 @@ struct AISettingsView: View {
     @State private var activeSessionsCount = 0
     @State private var lastHealthCheck: Date? = nil
     @State private var showingDiagnostics = false
+    @State private var xpcCallbackTestResult: String? = nil
 
     var body: some View {
         Form {
@@ -167,17 +168,57 @@ struct AISettingsView: View {
                     }
                     .buttonStyle(.bordered)
 
-                    if !aiManager.isConnected {
-                        Button("Restart XPC Service") {
-                            Task {
-                                _ = await AIXPCClient.shared.stopServer()
-                                try? await Task.sleep(for: .milliseconds(500))
-                                _ = await AIXPCClient.shared.startServer()
-                                refreshDiagnostics()
+                    Button("Test XPC Callback") {
+                        xpcCallbackTestResult = "⏳ Testing..."
+                        Task {
+                            // Create listener if not exists
+                            let listener = AIXPCListener()
+                            listener.onPingReceived = {
+                                print("✅ XPC CALLBACK SUCCESS! ping() received!")
+                                Task { @MainActor in
+                                    xpcCallbackTestResult = "✅ SUCCESS - XPC callback works!"
+                                }
+                            }
+                            AIXPCClient.shared.setListener(listener)
+
+                            // Start server (listener is exported automatically)
+                            _ = await AIXPCClient.shared.startServer()
+
+                            // Test ping - XPC Helper will call listener.ping()
+                            _ = await AIXPCClient.shared.testPing()
+
+                            // Wait 3 seconds for callback, if not received, mark as failed
+                            try? await Task.sleep(for: .seconds(3))
+                            await MainActor.run {
+                                if xpcCallbackTestResult == "⏳ Testing..." {
+                                    xpcCallbackTestResult = "❌ FAILED - No response after 3s"
+                                }
                             }
                         }
-                        .buttonStyle(.borderedProminent)
                     }
+                    .buttonStyle(.bordered)
+                }
+
+                if let result = xpcCallbackTestResult {
+                    HStack {
+                        Spacer()
+                        Text(result)
+                            .font(.caption)
+                            .foregroundStyle(result.contains("SUCCESS") ? .green : result.contains("Testing") ? .secondary : .red)
+                        Spacer()
+                    }
+                }
+
+                if !aiManager.isConnected {
+                    Button("Restart XPC Service") {
+                        Task {
+                            _ = await AIXPCClient.shared.stopServer()
+                            try? await Task.sleep(for: .milliseconds(500))
+                            _ = await AIXPCClient.shared.startServer()
+                            refreshDiagnostics()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
             } header: {
                 Text("Diagnostics")
