@@ -293,6 +293,9 @@ class AIXPCListener: NSObject, AIXPCEventListener {
     /// Callback when interrupt is received
     var onInterruptReceived: ((String) -> Void)?
 
+    /// Callback when session status changes (busy/idle from sessions/*.json)
+    var onSessionStatusReceived: ((String, String) -> Void)?
+
     func ping() {
         NSLog("AIXPCListener: ping() received!")
         onPingReceived?()
@@ -306,5 +309,10 @@ class AIXPCListener: NSObject, AIXPCEventListener {
     func onInterrupt(sessionId: String) {
         NSLog("AIXPCListener: onInterrupt received for \(sessionId.prefix(8))")
         onInterruptReceived?(sessionId)
+    }
+
+    func onSessionStatus(sessionId: String, status: String) {
+        NSLog("AIXPCListener: onSessionStatus received for \(sessionId.prefix(8)) -> \(status)")
+        onSessionStatusReceived?(sessionId, status)
     }
 }

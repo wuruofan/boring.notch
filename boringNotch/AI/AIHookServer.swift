@@ -38,7 +38,11 @@ class AIHookServer {
     // MARK: - Helper
 
     private func appendLog(_ msg: String) {
-        if let data = msg.data(using: .utf8) {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss.SSS"
+        let timestamp = formatter.string(from: Date())
+        let msgWithTime = "[\(timestamp)] \(msg)"
+        if let data = msgWithTime.data(using: .utf8) {
             if FileManager.default.fileExists(atPath: Self.logPath) {
                 if let fh = FileHandle(forWritingAtPath: Self.logPath) {
                     fh.seekToEndOfFile()
@@ -67,6 +71,11 @@ class AIHookServer {
             listener.onInterruptReceived = { sessionId in
                 Task {
                     await self?.handleInterrupt(sessionId: sessionId)
+                }
+            }
+            listener.onSessionStatusReceived = { sessionId, status in
+                Task {
+                    await self?.handleSessionStatus(sessionId: sessionId, status: status)
                 }
             }
             AIXPCClient.shared.setListener(listener)
@@ -312,6 +321,20 @@ class AIHookServer {
                 name: .AIInterruptDetected,
                 object: nil,
                 userInfo: ["sessionId": sessionId]
+            )
+        }
+    }
+
+    /// Handle session status callback (busy/idle) from sessions/*.json
+    private func handleSessionStatus(sessionId: String, status: String) async {
+        appendLog("handleSessionStatus: Received status \(status) for \(sessionId.prefix(8))\n")
+
+        // Post notification for AIManager to handle
+        await MainActor.run {
+            NotificationCenter.default.post(
+                name: .AISessionStatusChanged,
+                object: nil,
+                userInfo: ["sessionId": sessionId, "status": status]
             )
         }
     }

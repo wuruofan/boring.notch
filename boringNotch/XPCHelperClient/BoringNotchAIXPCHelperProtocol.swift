@@ -8,6 +8,8 @@ import Foundation
     func onStateUpdate(sessionIds: [String])
     /// Called when ESC interrupt is detected for a session
     func onInterrupt(sessionId: String)
+    /// Called when session status changes (busy/idle) from ~/.claude/sessions/*.json
+    func onSessionStatus(sessionId: String, status: String)
     /// Ping for connectivity test (minimal verification)
     func ping()
 }

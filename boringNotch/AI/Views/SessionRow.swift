@@ -27,13 +27,15 @@ struct SessionRow: View {
                 statusIndicator
                     .frame(width: 16, height: 16)
 
+                    let sessionId = session.id.prefix(8)
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(projectName)
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.white)
                         .lineLimit(1)
 
-                    Text(secondLineText)
+                    Text("\(sessionId) | \(secondLineText)")
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundColor(secondLineColor)
                         .lineLimit(1)

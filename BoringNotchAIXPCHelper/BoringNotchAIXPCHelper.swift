@@ -7,6 +7,7 @@ class BoringNotchAIXPCHelper: NSObject, BoringNotchAIXPCHelperProtocol {
 
     private var hookServer: AIHookServerCore?
     private var connection: NSXPCConnection?
+    private var sessionsWatcher: SessionsWatcher?
 
     func startServer(with reply: @escaping (Bool) -> Void) {
         NSLog("BoringNotchAIXPCHelper: startServer called")
@@ -22,12 +23,29 @@ class BoringNotchAIXPCHelper: NSObject, BoringNotchAIXPCHelperProtocol {
         server.start()
         hookServer = server
         NSLog("BoringNotchAIXPCHelper: Server started, replying true")
+
+        // Start sessions watcher for busy/idle status
+        startSessionsWatcher()
+
         reply(true)
+    }
+
+    private func startSessionsWatcher() {
+        guard sessionsWatcher == nil else { return }
+        let watcher = SessionsWatcher()
+        watcher.onStatusChange = { [weak self] sessionId, status in
+            self?.notifySessionStatus(sessionId: sessionId, status: status)
+        }
+        watcher.start()
+        sessionsWatcher = watcher
+        NSLog("BoringNotchAIXPCHelper: SessionsWatcher started")
     }
 
     func stopServer(with reply: @escaping (Bool) -> Void) {
         hookServer?.stop()
         hookServer = nil
+        sessionsWatcher?.stop()
+        sessionsWatcher = nil
         InterruptWatcherManagerCore.shared.stopAll()
         NSLog("BoringNotchAIXPCHelper: Server stopped")
         reply(true)
@@ -149,6 +167,13 @@ class BoringNotchAIXPCHelper: NSObject, BoringNotchAIXPCHelperProtocol {
         guard let listener = getListener() else { return }
         NSLog("BoringNotchAIXPCHelper: Calling listener.onInterrupt for \(sessionId.prefix(8))")
         listener.onInterrupt(sessionId: sessionId)
+    }
+
+    /// Send session status callback to main app (busy/idle from sessions/*.json)
+    func notifySessionStatus(sessionId: String, status: String) {
+        guard let listener = getListener() else { return }
+        NSLog("BoringNotchAIXPCHelper: Calling listener.onSessionStatus for \(sessionId.prefix(8)) -> \(status)")
+        listener.onSessionStatus(sessionId: sessionId, status: status)
     }
 
     // MARK: - Test Methods (for verification)

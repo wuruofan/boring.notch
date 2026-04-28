@@ -1,6 +1,7 @@
 # 理想状态流转方案可行性分析
 
 > 对 `ai-state-flow-optimization.md` 中提出的理想方案进行可行性评估。
+> **更新 (2026-04-27)**: XPC 推送和 JSONL Interrupt 链路均已验证成功。
 
 ---
 
@@ -37,73 +38,40 @@ Hook 事件 → XPC Helper 写入状态文件(原子写入)
 
 ## 二、可行性分析
 
-### 问题 1：XPC 推送模式的根本性障碍 ⚠️ 严重
+### 问题 1：XPC 推送模式的实现 ✅ 已解决
 
 **方案描述**：
 > XPC Helper 读取状态文件后通过 XPC 回调主动通知主 App
 
-**技术障碍**：
+**解决方案 (已实现)**：
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                          XPC Service 环境限制                                 │
+│                          XPC 推送链路 (已验证)                                │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│  问题：XPC Service 没有完整的 RunLoop                                        │
+│  XPC Helper (AIHookServerCore)                                               │
+│  ├─ Thread.polling 接收 Socket 数据 (替代 DispatchSource)                   │
+│  ├─ 写入状态文件 (per-session)                                               │
+│  └─ helper.notifyStateUpdate(sessionIds) ← XPC 回调推送                     │
 │                                                                              │
-│  已验证失败的机制：                                                          │
-│  ├─ DispatchSource.makeReadSource → 不触发                                   │
-│  ├─ DispatchSource.makeFileSystemObjectSource → 不触发                      │
-│  ├─ FileHandle.readabilityHandler → 不触发                                  │
-│  ├─ Thread.start() → 线程不启动                                              │
-│  ├─ Task.detached → 不稳定                                                   │
-│  └─────────────────────────────────────────────────────────────────────────┤│
+│  主 App (AIXPCListener)                                                      │
+│  └─ onStateUpdate(sessionIds) → pollSpecificStateFiles()                    │
 │                                                                              │
-│  结论：XPC Service 无法实时监听文件变化                                       │
-│        只能使用轮询（但这又回到了当前方案的问题）                              │
+│  验证证据 (2026-04-27)：                                                       │
+│  ├─ 日志: "Sent stateupdate callback for b350c048 via XPC listener"         │
+│  ├─ 日志: "AIXPCListener: onStateUpdate received with 1 sessions"           │
+│  └─ 延迟: 毫秒级                                                              │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**如果要实现推送，需要的架构**：
+**关键技术决策**：
+- 使用 `Thread.polling` 替代 `DispatchSource` → 解决 XPC Service 无 RunLoop 问题
+- XPC 回调穿透 Sandbox → 主 App 可以接收推送
+- 保留 15s fallback 轮询 → 防止回调丢失
 
-```
-方案 A：XPC Helper 轮询 + 推送（可行但复杂）
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  XPC Helper                                                                  │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │ while true {                                                          │  │
-│  │     data = readStateFile()                                            │  │
-│  │     if data.changed {                                                 │  │
-│  │         call mainApp.xpcCallback(data)  // 主动推送                   │  │
-│  │     }                                                                 │  │
-│  │     sleep(50ms)  // 更高频轮询                                        │  │
-│  │ }                                                                     │  │
-│  └──────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│  问题：                                                                      │
-│  ├─ 仍然是轮询，只是轮询位置从主 App 移到 XPC Helper                        │
-│  ├─ XPC 回调需要主 App 实现 XPC 服务端接口（反向调用）                       │
-│  ├─ 增加复杂度，收益有限                                                     │
-│  └─────────────────────────────────────────────────────────────────────────┤│
-└─────────────────────────────────────────────────────────────────────────────┘
-
-方案 B：Hook 脚本直接调用 XPC（可行但改动大）
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  Hook Python 脚本                                                            │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │ def send_event(state):                                                │  │
-│  │     # 直接调用 XPC 服务（需要 Python XPC 绑定）                        │  │
-│  │     xpc_call("theboringteam.boringnotch.BoringNotchAIXPCHelper",      │  │
-│  │              "onHookEvent", state)                                    │  │
-│  └──────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│  问题：                                                                      │
-│  ├─ Python 没有 native XPC 绑定，需要用 PyObjC 或自定义 bridge              │
-│  ├─ Hook 脚本复杂度增加                                                      │
-│  ├─ 可能影响 Hook 执行性能                                                   │
-│  └─────────────────────────────────────────────────────────────────────────┤│
-└─────────────────────────────────────────────────────────────────────────────┘
+**结论**：✅ **已解决** - XPC 推送链路稳定工作，毫秒级延迟。
 ```
 
 **结论**：XPC 推送模式理论上可行，但需要额外架构改动，收益不大。
@@ -158,27 +126,45 @@ Hook 事件 → XPC Helper 写入状态文件(原子写入)
 
 ---
 
-### 问题 3：interrupt 标记依赖未验证的链路 ⚠️ 中等
+### 问题 3：interrupt 标记链路 ✅ 已验证成功
 
 **方案描述**：
 > 窗口内收到 XPC interrupt → idle (中断，标记阻止后续覆盖)
 
-**依赖条件**：
-1. JSONL 文件监听（DispatchSource）在 XPC Service 中工作
-2. Darwin Notification 跨进程通知可靠
-3. 主 App 收到通知后能正确识别 sessionId
+**验证结果 (2026-04-27)**：
 
-**当前状态**：
-- JSONLInterruptWatcherCore 已实现但未验证
-- Darwin Notification 已实现但未测试
-- 整个链路没有实际验证过
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          JSONL Interrupt 链路 (已验证)                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  JSONL 文件写入格式 (实测):                                                   │
+│  {"type":"user","message":{"content":[{"type":"tool_result",                │
+│   "content":"Interrupted by user","is_error":true}]}}                       │
+│                                                                              │
+│  XPC Helper (JSONLInterruptPollingThread)                                    │
+│  ├─ Thread.polling 监听 JSONL 文件 (500ms)                                   │
+│  ├─ 检测模式: "Interrupted by user", "[Request interrupted by user]"        │
+│  └─ helper.notifyInterrupt(sessionId) ← XPC 回调推送                        │
+│                                                                              │
+│  主 App (AIXPCListener)                                                      │
+│  └─ onInterrupt → handleXPCInterrupt() → session.phase = .idle              │
+│                                                                              │
+│  验证证据:                                                                    │
+│  ├─ 日志: "handleInterrupt: Received interrupt for 39bff100"                │
+│  ├─ 日志: "handleXPCInterrupt: Session 39bff100 interrupted -> idle"        │
+│  ├─ 日志: "sortedSessions: 39bff100:idle"                                   │
+│  └─ UI: 状态正确更新为 idle                                                   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
-**如果链路不工作**：
-- interrupt 标记机制完全无效
-- 时间窗口方案失去"中断检测"这一关键判断
-- 只剩下"超时兜底"
+**关键技术决策**：
+- 使用 `Thread.polling` 替代 `DispatchSource` → 解决 XPC Service 无 RunLoop
+- 使用 XPC 回调替代 Darwin Notification → 更可靠，穿透 Sandbox
+- 检测 `"Interrupted by user"` 文本 → 覆盖 JSONL 实际格式
 
-**结论**：interrupt 标记方案是空中楼阁，需要先验证链路。
+**结论**：✅ **已验证成功** - thinking 阶段 ESC 打断检测完全工作。
 
 ---
 
@@ -203,7 +189,7 @@ try? str.write(toFile: Self.stateFilePath, atomically: true, encoding: .utf8)
 
 ---
 
-## 三、方案总体评估
+## 三、方案总体评估 (2026-04-27 更新)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -216,19 +202,21 @@ try? str.write(toFile: Self.stateFilePath, atomically: true, encoding: .utf8)
 │  └─────────────────────────────────────────────────────────────────────────┤│
 │                                                                              │
 │  改进点 2：XPC 推送                                                          │
-│  ├─ 可行性：⚠️ 理论可行，但需要额外架构                                      │
-│  ├─ 问题：XPC Service 无 RunLoop，无法实时监听                               │
-│  ├─ 替代方案：XPC Helper 轮询 + 推送（收益有限）                              │
+│  ├─ 可行性：✅ 已实现并验证                                                  │
+│  ├─ 解决方案：Thread.polling + XPC 回调                                     │
+│  ├─ 延迟：毫秒级                                                             │
 │  └─────────────────────────────────────────────────────────────────────────┤│
 │                                                                              │
 │  改进点 3：interrupt 标记                                                    │
-│  ├─ 可行性：⏳ 依赖未验证的链路                                              │
-│  ├─ 问题：JSONL 监听 + Darwin Notification 未测试                           │
+│  ├─ 可行性：✅ 已验证成功                                                    │
+│  ├─ 解决方案：JSONLInterruptPollingThread + XPC 回调                        │
+│  ├─ 检测模式：覆盖 JSONL 实际格式                                            │
 │  └─────────────────────────────────────────────────────────────────────────┤│
 │                                                                              │
 │  改进点 4：时间窗口兜底                                                       │
 │  ├─ 可行性：⚠️ 有逻辑漏洞                                                    │
 │  ├─ 问题：无法处理长任务和事件乱序                                            │
+│  ├─ 替代方案：interrupt 链路已验证，时间窗口不再必需                          │
 │  └─────────────────────────────────────────────────────────────────────────┤│
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -304,28 +292,35 @@ try? str.write(toFile: Self.stateFilePath, atomically: true, encoding: .utf8)
 
 ---
 
-## 五、建议实施顺序
+## 五、建议实施顺序 (2026-04-27 更新)
 
-| 优先级 | 改动 | 可行性 | 说明 |
-|--------|------|--------|------|
-| **立即** | 原子写入 | ✅ 可行 | 低风险，防止事件丢失 |
-| **立即** | idle_prompt 无条件覆盖 | ✅ 可行 | 解决竞态，逻辑简单 |
-| **立即** | 清理死代码 | ✅ 可行 | 删除 `stopCompletionWindow` 等 |
-| **立即** | 超时后更新 UI | ✅ 可行 | 加 `updateCoordinator()` |
-| **稍后** | 验证 interrupt 链路 | ⏳ 待验证 | 如果成功可加标记机制 |
-| **长期** | XPC 推送 | ⚠️ 复杂 | 收益有限，可考虑但不优先 |
+| 优先级 | 改动 | 状态 | 说明 |
+|--------|------|------|------|
+| **已完成** | 原子写入 | ✅ 已实施 | 防止事件丢失 |
+| **已完成** | XPC 推送 | ✅ 已验证 | 毫秒级延迟，穿透 Sandbox |
+| **已完成** | JSONL Interrupt | ✅ 已验证 | thinking 阶段 ESC 打断检测 |
+| **已完成** | idle_prompt 无条件覆盖 | ✅ 已实施 | 解决竞态，逻辑简单 |
+| **已完成** | Sessions 状态监听 | ✅ 已验证 | 2026-04-28，权威 idle 判断 |
+| **可选** | 清理死代码 | ⏳ 待清理 | 删除 Darwin Notification 相关代码 |
+| **可选** | 优化 fallback 轮询频率 | ⏳ 待优化 | 当前 15s，可改为 5s |
 
 ---
 
-## 六、结论
+## 六、结论 (2026-04-28 更新)
 
-**理想方案的可行性问题**：
-1. XPC 推送依赖 XPC Service 有 RunLoop（实际没有）
-2. 时间窗口无法解决长任务和乱序问题
-3. interrupt 标记依赖未验证的链路
+**理想方案验证结果**：
+1. ✅ XPC 推送通过 Thread.polling + XPC 回调实现，毫秒级延迟
+2. ✅ JSONL Interrupt 链路完全工作，thinking 阶段 ESC 打断可检测
+3. ✅ Sessions 状态监听已实现，权威 idle 判断，解决 UserPromptSubmit ~ PreToolUse 之间的空白期
+4. ⚠️ 时间窗口方案仍有逻辑漏洞，但 Sessions 状态监听已解决核心问题
 
-**建议采用更简洁的方案**：
-- idle_prompt 无条件覆盖（解决竞态）
-- 原子写入（防止丢失）
-- 超时后更新 UI（防止卡死）
-- interrupt 标记作为可选补充（如果链路验证成功）
+**当前架构状态**：
+- 推送链路稳定工作，无需轮询延迟
+- Sessions 状态权威，覆盖所有阶段的 ESC 打断检测
+- 15s fallback 轮询作为兜底机制
+- 竞态问题已解决（sessions idle 不被 Hook 覆盖）
+
+**未来可选改进**：
+- 清理 Darwin Notification 相关死代码（已改用 XPC 回调）
+- 优化 fallback 轮询频率以进一步降低丢失风险
+- 调研多 Agent 支持（Codex/OpenCode/Cursor）

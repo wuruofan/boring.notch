@@ -8,6 +8,7 @@ import SwiftUI
 extension Notification.Name {
     static let AIWaitingForApprovalChanged = Notification.Name("AIWaitingForApprovalChanged")
     static let AIInterruptDetected = Notification.Name("com.boringnotch.ai.interrupt.detected")
+    static let AISessionStatusChanged = Notification.Name("com.boringnotch.ai.session.status.changed")
 }
 
 @MainActor
@@ -90,7 +91,11 @@ class AIManager: ObservableObject {
     }()
 
     private func appendAILog(_ msg: String) {
-        if let data = msg.data(using: .utf8) {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss.SSS"
+        let timestamp = formatter.string(from: Date())
+        let msgWithTime = "[\(timestamp)] \(msg)"
+        if let data = msgWithTime.data(using: .utf8) {
             if FileManager.default.fileExists(atPath: Self.logPath) {
                 if let fh = FileHandle(forWritingAtPath: Self.logPath) {
                     fh.seekToEndOfFile()
@@ -124,6 +129,18 @@ class AIManager: ObservableObject {
             using: { [weak self] notification in
                 guard let sessionId = notification.userInfo?["sessionId"] as? String else { return }
                 self?.handleXPCInterrupt(sessionId: sessionId)
+            }
+        )
+
+        // Listen for session status changes (busy/idle from sessions/*.json)
+        NotificationCenter.default.addObserver(
+            forName: .AISessionStatusChanged,
+            object: nil,
+            queue: .main,
+            using: { [weak self] notification in
+                guard let sessionId = notification.userInfo?["sessionId"] as? String,
+                      let status = notification.userInfo?["status"] as? String else { return }
+                self?.handleSessionsStatus(sessionId: sessionId, status: status)
             }
         )
     }
@@ -651,6 +668,43 @@ extension AIManager {
 
             // Update coordinator to reflect state change
             updateCoordinator()
+        }
+    }
+
+    /// Handle session status change from ~/.claude/sessions/*.json (busy/idle)
+    /// Sessions status is the authoritative source for idle state.
+    func handleSessionsStatus(sessionId: String, status: String) {
+        appendAILog("handleSessionsStatus: Session \(sessionId.prefix(8)) status=\(status)\n")
+
+        if status == "idle" {
+            // Sessions idle is authoritative - override any Hook event state
+            if var session = sessions[sessionId] {
+                session.phase = .idle
+                session.lastUpdated = Date()
+                sessions[sessionId] = session
+                appendAILog("handleSessionsStatus: Session \(sessionId.prefix(8)) -> idle (authoritative)\n")
+
+                // Stop XPC watcher for this session
+                Task {
+                    await AIXPCClient.shared.stopInterruptWatcher(sessionId: sessionId)
+                }
+
+                // Update coordinator
+                updateCoordinator()
+            }
+        } else if status == "busy" {
+            // Sessions busy - but we use Hook events for detailed phase
+            // Only create session if it doesn't exist (fallback)
+            if sessions[sessionId] == nil {
+                sessions[sessionId] = AISessionState(
+                    id: sessionId,
+                    phase: .processing,
+                    lastUpdated: Date()
+                )
+                appendAILog("handleSessionsStatus: Created session \(sessionId.prefix(8)) as processing (fallback)\n")
+            }
+            // Update lastUpdated to indicate session is still active
+            sessions[sessionId]?.lastUpdated = Date()
         }
     }
 }
