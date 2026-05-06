@@ -6,7 +6,6 @@ import Defaults
 struct SessionRow: View {
     let session: AISessionState
     @State private var isHovered = false
-    @State private var isClicked = false
     @Default(.aiSleepAnimationEnabled) private var sleepAnimationEnabled
 
     private var isWaitingForApproval: Bool {
@@ -14,15 +13,8 @@ struct SessionRow: View {
     }
 
     var body: some View {
-        Button(action: {
-            isClicked = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                isClicked = false
-            }
-            // TODO: Open ChatView
-            // For now, placeholder - will be replaced with ChatView implementation
-            print("SessionRow clicked: open ChatView for \(session.id.prefix(8))")
-        }) {
+        HStack(alignment: .center, spacing: 10) {
+            // Left side: clickable area for ChatView
             HStack(alignment: .center, spacing: 10) {
                 statusIndicator
                     .frame(width: 16, height: 16)
@@ -39,27 +31,31 @@ struct SessionRow: View {
                         .lineLimit(1)
                 }
                 .frame(height: 34, alignment: .leading)
-
-                Spacer(minLength: 0)
-
-                // Right side buttons
-                if isWaitingForApproval, let request = session.permissionRequest {
-                    ApprovalButtons(sessionId: session.id, requestId: request.id)
-                } else {
-                    terminalButton
-                }
             }
-            .padding(.leading, 8)
-            .padding(.trailing, 12)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isClicked ? Color.white.opacity(0.3) : (isHovered ? Color.white.opacity(0.06) : Color.clear))
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 10))
             .contentShape(Rectangle())
+            .onTapGesture {
+                // TODO: Open ChatView
+                print("SessionRow clicked: open ChatView for \(session.id.prefix(8))")
+            }
+
+            Spacer(minLength: 0)
+
+            // Right side buttons (independent click handling)
+            if isWaitingForApproval, let request = session.permissionRequest {
+                ApprovalButtons(sessionId: session.id, requestId: request.id)
+            } else {
+                terminalButton
+            }
         }
-        .buttonStyle(BorderlessButtonStyle())
+        .padding(.leading, 8)
+        .padding(.trailing, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(isHovered ? Color.white.opacity(0.06) : Color.clear)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .contentShape(Rectangle())
         .onHover { isHovered = $0 }
     }
 
