@@ -19,15 +19,13 @@ struct SessionRow: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 isClicked = false
             }
-            Task {
-                await jumpToSession()
-            }
+            // TODO: Open ChatView
+            // For now, placeholder - will be replaced with ChatView implementation
+            print("SessionRow clicked: open ChatView for \(session.id.prefix(8))")
         }) {
             HStack(alignment: .center, spacing: 10) {
                 statusIndicator
                     .frame(width: 16, height: 16)
-
-                    let sessionId = session.id.prefix(8)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(projectName)
@@ -35,7 +33,7 @@ struct SessionRow: View {
                         .foregroundColor(.white)
                         .lineLimit(1)
 
-                    Text("\(sessionId) | \(secondLineText)")
+                    Text(secondLineText)
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundColor(secondLineColor)
                         .lineLimit(1)
@@ -44,8 +42,11 @@ struct SessionRow: View {
 
                 Spacer(minLength: 0)
 
+                // Right side buttons
                 if isWaitingForApproval, let request = session.permissionRequest {
                     ApprovalButtons(sessionId: session.id, requestId: request.id)
+                } else {
+                    terminalButton
                 }
             }
             .padding(.leading, 8)
@@ -60,6 +61,29 @@ struct SessionRow: View {
         }
         .buttonStyle(BorderlessButtonStyle())
         .onHover { isHovered = $0 }
+    }
+
+    // MARK: - Terminal Button
+
+    @State private var isTerminalButtonHovered = false
+
+    private var terminalButton: some View {
+        Button {
+            Task {
+                await jumpToSession()
+            }
+        } label: {
+            Image(systemName: "terminal")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(isTerminalButtonHovered ? .white.opacity(0.7) : .white.opacity(0.4))
+                .frame(width: 24, height: 24)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(isTerminalButtonHovered ? Color.white.opacity(0.1) : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { isTerminalButtonHovered = $0 }
     }
 
     // MARK: - Jump to Session
@@ -166,7 +190,6 @@ struct SessionRow: View {
 
     private var projectName: String {
         guard let cwd = session.cwd else { return "Claude Code" }
-        let baseName = cwd.split(separator: "/").last.map(String.init) ?? "Claude Code"
-        return session.subagentCount > 0 ? "\(baseName) [\(session.subagentCount)]" : baseName
+        return cwd.split(separator: "/").last.map(String.init) ?? "Claude Code"
     }
 }
