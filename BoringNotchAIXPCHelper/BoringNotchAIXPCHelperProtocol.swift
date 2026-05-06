@@ -60,6 +60,12 @@ import Foundation
     /// Returns (success: Bool, output: String)
     func runShellCommand(command: String, with reply: @escaping (Bool, String) -> Void)
 
+    // MARK: - Sessions Query
+
+    /// Get all active session IDs from ~/.claude/sessions/*.json
+    /// Returns array of sessionIds
+    func getAllActiveSessionIds(with reply: @escaping ([String]) -> Void)
+
     // MARK: - Test Callback (for verification)
 
     /// Test XPC callback by sending ping to main app's listener.

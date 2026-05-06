@@ -125,6 +125,35 @@ class BoringNotchAIXPCHelper: NSObject, BoringNotchAIXPCHelperProtocol {
         }
     }
 
+    // MARK: - Sessions Query
+
+    func getAllActiveSessionIds(with reply: @escaping ([String]) -> Void) {
+        let sessionsDir = NSHomeDirectory() + "/.claude/sessions/"
+        var sessionIds: [String] = []
+
+        guard FileManager.default.fileExists(atPath: sessionsDir) else {
+            reply(sessionIds)
+            return
+        }
+
+        do {
+            let files = try FileManager.default.contentsOfDirectory(atPath: sessionsDir)
+            for filename in files where filename.hasSuffix(".json") {
+                let filepath = sessionsDir + filename
+                if let data = FileManager.default.contents(atPath: filepath),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let sessionId = json["sessionId"] as? String {
+                    sessionIds.append(sessionId)
+                }
+            }
+        } catch {
+            NSLog("BoringNotchAIXPCHelper: Error reading sessions: \(error)")
+        }
+
+        NSLog("BoringNotchAIXPCHelper: getAllActiveSessionIds returned \(sessionIds.count) sessions")
+        reply(sessionIds)
+    }
+
     // MARK: - Connection Management
 
     /// Store connection reference to access remoteObjectProxy (main app's listener)

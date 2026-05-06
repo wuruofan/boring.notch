@@ -247,6 +247,22 @@ final class AIXPCClient {
         }
     }
 
+    // MARK: - Sessions Query
+
+    nonisolated func getAllActiveSessionIds() async -> [String] {
+        do {
+            let service = await MainActor.run { ensureRemoteService() }
+            return try await service.withContinuation { service, continuation in
+                service.getAllActiveSessionIds { sessionIds in
+                    continuation.resume(returning: sessionIds)
+                }
+            }
+        } catch {
+            NSLog("AIXPCClient: getAllActiveSessionIds failed: \(error)")
+            return []
+        }
+    }
+
     // MARK: - Listener Registration (for real-time callbacks)
 
     /// Set the listener for receiving XPC callbacks.

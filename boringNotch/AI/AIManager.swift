@@ -170,6 +170,10 @@ class AIManager: ObservableObject {
             let success = await AIXPCClient.shared.startServer()
             isConnected = success
             appendAILog("AIManager: XPC startServer result = \(success)\n")
+
+            // Delay then cleanup zombie sessions (sessions without corresponding files)
+            try? await Task.sleep(for: .seconds(2))
+            await cleanupZombieSessions()
         }
 
         // Start cleanup timer for stale processing sessions (every 10 seconds)
@@ -597,6 +601,47 @@ class AIManager: ObservableObject {
         sessions = sessions.filter { $0.value.lastUpdated > threshold }
     }
 
+    /// Cleanup zombie sessions that have no corresponding sessions file.
+    /// Called after XPC server starts and SessionsWatcher is ready.
+    func cleanupZombieSessions() async {
+        let activeSessionIds = await AIXPCClient.shared.getAllActiveSessionIds()
+        let activeSet = Set(activeSessionIds)
+
+        appendAILog("cleanupZombieSessions: Active sessions from XPC: \(activeSessionIds.count)\n")
+
+        // Find zombie sessions (in memory but not in sessions files)
+        var zombies: [String] = []
+        for sessionId in sessions.keys {
+            if !activeSet.contains(sessionId) {
+                zombies.append(sessionId)
+            }
+        }
+
+        // Remove zombies
+        for sessionId in zombies {
+            sessions.removeValue(forKey: sessionId)
+            appendAILog("cleanupZombieSessions: Removed zombie session \(sessionId.prefix(8))\n")
+        }
+
+        // Update activeSessionId if it was a zombie
+        if let currentActive = activeSessionId, !activeSet.contains(currentActive) {
+            activeSessionId = nil
+            isActive = false
+            // Check if other sessions are still active
+            for remaining in sessions.values {
+                if remaining.phase.isActive || remaining.phase == .waitingForApproval {
+                    activeSessionId = remaining.id
+                    isActive = true
+                    break
+                }
+            }
+        }
+
+        if !zombies.isEmpty {
+            updateCoordinator()
+        }
+    }
+
     /// Convert stale processing sessions to idle.
     /// With Darwin Notification, most stale sessions are cleaned by SessionEnd.
     /// Only keep timeout for error/toolFailed states to reset UI after brief display.
@@ -671,12 +716,41 @@ extension AIManager {
         }
     }
 
-    /// Handle session status change from ~/.claude/sessions/*.json (busy/idle)
+    /// Handle session status change from ~/.claude/sessions/*.json (busy/idle/ended)
     /// Sessions status is the authoritative source for idle state.
     func handleSessionsStatus(sessionId: String, status: String) {
         appendAILog("handleSessionsStatus: Session \(sessionId.prefix(8)) status=\(status)\n")
 
-        if status == "idle" {
+        if status == "ended" {
+            // Session file deleted - remove from dictionary
+            if sessions[sessionId] != nil {
+                sessions.removeValue(forKey: sessionId)
+                appendAILog("handleSessionsStatus: Session \(sessionId.prefix(8)) -> ended (removed)\n")
+
+                // Stop XPC watcher for this session
+                Task {
+                    await AIXPCClient.shared.stopInterruptWatcher(sessionId: sessionId)
+                }
+
+                // Update activeSessionId if this was the active one
+                if activeSessionId == sessionId {
+                    activeSessionId = nil
+                    isActive = false
+                    // Check if other sessions are still active
+                    for remaining in sessions.values {
+                        if remaining.phase.isActive || remaining.phase == .waitingForApproval {
+                            activeSessionId = remaining.id
+                            isActive = true
+                            appendAILog("handleSessionsStatus: Found other active session \(remaining.id.prefix(8))\n")
+                            break
+                        }
+                    }
+                }
+
+                // Update coordinator
+                updateCoordinator()
+            }
+        } else if status == "idle" {
             // Sessions idle is authoritative - override any Hook event state
             if var session = sessions[sessionId] {
                 session.phase = .idle
