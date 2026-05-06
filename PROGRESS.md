@@ -10,7 +10,6 @@
 ## 📥 Todo Queue
 <!-- Next planned tasks -->
 
-- [可选] 清理 Darwin Notification 死代码（已改用 XPC 回调）
 - [可选] 优化 fallback 轮询频率（当前 15s，可改为 5s）
 - [待调研] Codex/OpenCode/Cursor Hook 机制
 
@@ -58,8 +57,10 @@ sessions busy + Hook → 详细 phase
 
 | 日期 | 任务 | 状态 |
 |------|------|------|
+| 2026-04-28 | 清理 Darwin Notification 死代码 | ✅ 完成 |
 | 2026-04-28 | Sessions 状态监听实现 | ✅ 完成 |
 | 2026-04-28 | Sessions 状态监听验证 | ✅ 完成 |
+| 2026-04-28 | 僵尸 session 清理 | ✅ 完成 |
 | 2026-04-27 | XPC 推送链路验证 | ✅ 完成 |
 | 2026-04-27 | JSONL Interrupt 验证 | ✅ 完成 |
 
