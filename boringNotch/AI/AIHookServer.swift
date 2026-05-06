@@ -126,7 +126,7 @@ class AIHookServer {
             while !Task.isCancelled {
                 // Thread-safe read: use await MainActor.run to read @MainActor isolated property
                 let interval = await MainActor.run {
-                    self?.hasWaitingForApproval ?? false ? 1.0 : 15.0  // 15s fallback, 1s for approval
+                    self?.hasWaitingForApproval ?? false ? 1.0 : 5.0  // 5s fallback, 1s for approval
                 }
                 await self?.pollStateFiles()  // Full scan as fallback
                 try? await Task.sleep(for: .seconds(interval))
