@@ -252,6 +252,64 @@ contentType = .instances
 
 ---
 
+## 多显示器模式（Separate Display）
+
+### 设置项
+
+| 设置项 | 选项 | 说明 |
+|-------|------|------|
+| **主Notch显示器** | `fixed(UUID)` | 固定某显示器 |
+| | `autoFollow` | 跟随鼠标（只有一个，随鼠标移动） |
+| | `allDisplays` | 所有显示器都有主Notch |
+| **AI显示器** | `followNotch` | AI跟主Notch（合并态） |
+| | `separate(UUID)` | AI在指定显示器 |
+
+### 合并显示逻辑
+
+某显示器同时显示音乐+AI的条件：
+
+```
+showBoth = 主Notch在该显示器 && AI也在该显示器
+```
+
+**主Notch在某显示器**：
+| 主Notch设置 | 条件 |
+|------------|------|
+| `fixed(X)` | 当前显示器 == X |
+| `autoFollow` | 鼠标在当前显示器 |
+| `allDisplays` | 始终满足 |
+
+**AI在某显示器**：
+| AI设置 | 条件 |
+|-------|------|
+| `followNotch` | 主Notch在该显示器（跟随） |
+| `separate(Y)` | 当前显示器 == Y |
+
+### 场景组合表
+
+| 主Notch设置 | AI设置 | AI显示器展开态 | 其他显示器展开态 |
+|------------|--------|---------------|----------------|
+| `fixed(笔记本)` | `separate(显示器2)` | AI alone | 音乐 alone |
+| `autoFollow` + 鼠标在显示器2 | `separate(显示器2)` | 音乐+AI 合并 | 无主Notch |
+| `autoFollow` + 鼠标在其他 | `separate(显示器2)` | AI alone | 音乐 alone（鼠标在该显示器） |
+| `allDisplays` | `separate(显示器2)` | 音乐+AI 合并 | 音乐 alone |
+
+### 典型使用场景
+
+**笔记本+大显示器编程场景**：
+
+```
+设置：主Notch = allDisplays, AI = separate(显示器2)
+
+笔记本显示器：主Notch(音乐) → 展开态显示音乐 alone
+显示器2：主Notch(音乐) + AI Notch → 展开态合并显示音乐+AI
+显示器3：主Notch(音乐) → 展开态显示音乐 alone
+```
+
+用户在显示器2编程时，一眼看到AI状态，展开时音乐+AI合并显示。
+
+---
+
 ## 实现计划
 
 ### Phase 1：SessionRow 调整（当前）
