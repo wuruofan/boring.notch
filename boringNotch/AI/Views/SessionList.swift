@@ -5,11 +5,12 @@ import SwiftUI
 struct SessionList: View {
     @ObservedObject var aiManager = AIManager.shared
 
-    /// Calculate visible height based on session count (capped at 5)
+    /// Calculate visible height based on session count (capped at 3)
     /// SessionRow: 50px, spacing: 6px, padding: 16px (8px each side)
+    /// Cap at 3 to match BoringViewModel.effectiveOpenNotchSize calculation
     private var visibleHeight: CGFloat {
         let sessionCount = aiManager.sortedSessions.count
-        let effectiveCount = min(sessionCount, 5)
+        let effectiveCount = min(sessionCount, 3)
         let rowHeight: CGFloat = 50
         let spacing: CGFloat = 6
         let padding: CGFloat = 16
