@@ -1,8 +1,5 @@
 import Foundation
 
-/// Darwin notification name for interrupt detection
-let kInterruptNotificationName = "com.boringnotch.ai.interrupt"
-
 // MARK: - Interrupt Watcher Manager (XPC Helper)
 
 /// Manages interrupt watchers for all active sessions in XPC Helper

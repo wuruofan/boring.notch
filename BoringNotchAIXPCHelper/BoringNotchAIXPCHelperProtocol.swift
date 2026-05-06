@@ -15,10 +15,9 @@ import Foundation
 }
 
 /// Protocol for the AI XPC Helper service.
-/// The helper runs outside the sandbox and manages the Unix Domain Socket server
-/// and JSONL interrupt watchers.
-/// Interrupt detection uses Darwin Notification (CFNotificationCenter) for real-time
-/// cross-process communication.
+/// The helper runs outside the sandbox and manages the Unix Domain Socket server,
+/// JSONL interrupt watchers, and sessions status monitoring.
+/// All events are pushed via XPC callbacks (penetrates sandbox boundary).
 @objc protocol BoringNotchAIXPCHelperProtocol {
     /// Start the socket server
     func startServer(with reply: @escaping (Bool) -> Void)
@@ -44,8 +43,7 @@ import Foundation
     // MARK: - JSONL Interrupt Watching
 
     /// Start watching a session's JSONL file for interrupts.
-    /// When interrupt is detected, a Darwin Notification is sent with name:
-    /// "com.boringnotch.ai.interrupt" and session ID written to /tmp/boringnotch-interrupt-<sessionId>.txt
+    /// When interrupt is detected, XPC callback notifyInterrupt(sessionId) is sent.
     func startInterruptWatcher(sessionId: String, cwd: String, with reply: @escaping (Bool) -> Void)
     /// Stop watching a session's JSONL file
     func stopInterruptWatcher(sessionId: String, with reply: @escaping (Bool) -> Void)

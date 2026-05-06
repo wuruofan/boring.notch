@@ -643,9 +643,9 @@ class AIManager: ObservableObject {
     }
 
     /// Convert stale processing sessions to idle.
-    /// With Darwin Notification, most stale sessions are cleaned by SessionEnd.
+    /// With XPC callbacks, most stale sessions are cleaned by SessionEnd or SessionsWatcher.
     /// Only keep timeout for error/toolFailed states to reset UI after brief display.
-    /// Note: processing/runningTool/compacting rely on SessionEnd for cleanup.
+    /// Note: processing/runningTool/compacting rely on SessionsWatcher "ended" for cleanup.
     func convertStaleProcessingToIdle() {
         let now = Date()
         var changed = false
@@ -697,7 +697,7 @@ class AIManager: ObservableObject {
 // MARK: - XPC Interrupt Handling
 
 extension AIManager {
-    /// Handle interrupt detected by XPC Helper via Darwin Notification
+    /// Handle interrupt detected by XPC Helper via JSONL watcher
     func handleXPCInterrupt(sessionId: String) {
         // Convert processing session to idle on interrupt detection
         if var session = sessions[sessionId] {

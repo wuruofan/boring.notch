@@ -168,7 +168,7 @@ class AIHookServer {
         }
     }
 
-    /// Poll specific state files identified by Darwin Notification
+    /// Poll specific state files identified by XPC callback
     /// This avoids scanning all files when we know which sessions changed
     private func pollSpecificStateFiles(sessionIds: [String]) async {
         let basePath = Self.stateFileBasePath
