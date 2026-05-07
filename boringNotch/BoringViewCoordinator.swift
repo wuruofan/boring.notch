@@ -64,7 +64,7 @@ class BoringViewCoordinator: ObservableObject {
 
     func closeChat() {
         selectedChatSession = nil
-        currentView = .ai
+        currentView = .home  // Return to home view with SessionList
     }
 
     @Published var helloAnimationRunning: Bool = false
