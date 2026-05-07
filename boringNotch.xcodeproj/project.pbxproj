@@ -152,7 +152,6 @@
 		AIAI000E0000000000000001 /* TmuxTargetFinder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI000D0000000000000001 /* TmuxTargetFinder.swift */; };
 		AIAI0010000000000000001 /* ToolApprovalHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI000F0000000000000001 /* ToolApprovalHandler.swift */; };
 		AIAI00120000000000000001 /* AILiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00110000000000000001 /* AILiveActivity.swift */; };
-		AIAI00140000000000000001 /* AIExpandedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00130000000000000001 /* AIExpandedView.swift */; };
 		AIAI00160000000000000001 /* AgentIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00150000000000000001 /* AgentIconView.swift */; };
 		AIAI00210000000000000001 /* SessionPriorityHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00200000000000000001 /* SessionPriorityHelper.swift */; };
 		AIAI00210000000000000002 /* SessionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00200000000000000002 /* SessionRow.swift */; };
@@ -349,7 +348,6 @@
 		AIAI000D0000000000000001 /* TmuxTargetFinder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TmuxTargetFinder.swift; sourceTree = "<group>"; };
 		AIAI000F0000000000000001 /* ToolApprovalHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolApprovalHandler.swift; sourceTree = "<group>"; };
 		AIAI00110000000000000001 /* AILiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AILiveActivity.swift; sourceTree = "<group>"; };
-		AIAI00130000000000000001 /* AIExpandedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIExpandedView.swift; sourceTree = "<group>"; };
 		AIAI00150000000000000001 /* AgentIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIconView.swift; sourceTree = "<group>"; };
 		AIAI00200000000000000001 /* SessionPriorityHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPriorityHelper.swift; sourceTree = "<group>"; };
 		AIAI00200000000000000002 /* SessionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRow.swift; sourceTree = "<group>"; };
@@ -875,7 +873,6 @@
 			isa = PBXGroup;
 			children = (
 				AIAI00110000000000000001 /* AILiveActivity.swift */,
-				AIAI00130000000000000001 /* AIExpandedView.swift */,
 				AIAI00150000000000000001 /* AgentIconView.swift */,
 				AIAI00200000000000000001 /* SessionPriorityHelper.swift */,
 				AIAI00200000000000000002 /* SessionRow.swift */,
@@ -1203,7 +1200,6 @@
 				AIAI000E0000000000000001 /* TmuxTargetFinder.swift in Sources */,
 				AIAI0010000000000000001 /* ToolApprovalHandler.swift in Sources */,
 				AIAI00120000000000000001 /* AILiveActivity.swift in Sources */,
-				AIAI00140000000000000001 /* AIExpandedView.swift in Sources */,
 				AIAI00160000000000000001 /* AgentIconView.swift in Sources */,
 				AIAI00210000000000000001 /* SessionPriorityHelper.swift in Sources */,
 				AIAI00210000000000000002 /* SessionRow.swift in Sources */,
