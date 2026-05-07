@@ -346,21 +346,39 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Listen for notchWillOpen to immediately set window height before animation starts
+        // Listen for notchWillOpen to animate window from closed to open
         NotificationCenter.default.addObserver(
             forName: Notification.Name.notchWillOpen, object: nil, queue: .main
         ) { [weak self] notification in
             guard let self = self, let window = self.window else { return }
-            // Synchronously set window to target height before ContentView animation starts
-            let targetHeight = self.vm.effectiveOpenNotchSize.height + shadowPadding
+            let targetSize = (notification.userInfo?["targetSize"] as? CGSize) ?? self.vm.effectiveOpenNotchSize
+            let targetHeight = targetSize.height + shadowPadding
             let screenFrame = window.screen?.frame ?? NSScreen.main?.frame ?? .zero
+
+            NSLog("🪟 [AppDelegate.notchWillOpen] START: targetHeight=%.0f", targetHeight)
+
+            // Set animatingNotchSize BEFORE starting window animation
+            // This makes SwiftUI frame height match target immediately (no animation)
+            self.vm.animatingNotchSize = targetSize
+
             let newFrame = NSRect(
                 x: screenFrame.origin.x + (screenFrame.width / 2) - windowSize.width / 2,
                 y: screenFrame.origin.y + screenFrame.height - targetHeight,
                 width: windowSize.width,
                 height: targetHeight
             )
-            window.setFrame(newFrame, display: true, animate: false)
+            // Use NSAnimationContext for smooth window animation
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.35
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                window.animator().setFrame(newFrame, display: true)
+            } completionHandler: {
+                // Animation complete - update notchSize and clear animatingNotchSize
+                Task { @MainActor in
+                    self.vm.notchSize = targetSize
+                    self.vm.animatingNotchSize = nil
+                }
+            }
         }
 
         // Listen for notchWillResize for tab switching height changes
@@ -368,12 +386,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             forName: Notification.Name.notchWillResize, object: nil, queue: .main
         ) { [weak self] notification in
             guard let self = self, let window = self.window else { return }
-            let targetSize = self.vm.effectiveOpenNotchSize
+            let targetSize = (notification.userInfo?["targetSize"] as? CGSize) ?? self.vm.effectiveOpenNotchSize
             let targetHeight = targetSize.height + shadowPadding
             let targetWidth = targetSize.width
             let screenFrame = window.screen?.frame ?? NSScreen.main?.frame ?? .zero
             let currentFrame = window.frame
             let currentTopY = currentFrame.origin.y + currentFrame.height
+
+            // Set animatingNotchSize for SwiftUI frame during animation
+            self.vm.animatingNotchSize = targetSize
 
             // Adjust if height or width changes
             if currentFrame.height != targetHeight || currentFrame.width != targetWidth {
@@ -386,9 +407,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     height: targetHeight
                 )
                 NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.25
+                    context.duration = 0.35
                     context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                     window.animator().setFrame(newFrame, display: true)
+                } completionHandler: {
+                    // Animation complete - update notchSize and clear animatingNotchSize
+                    Task { @MainActor in
+                        self.vm.notchSize = targetSize
+                        self.vm.animatingNotchSize = nil
+                    }
+                }
+            } else {
+                // No size change - just clear animatingNotchSize
+                Task { @MainActor in
+                    self.vm.notchSize = targetSize
+                    self.vm.animatingNotchSize = nil
                 }
             }
         }

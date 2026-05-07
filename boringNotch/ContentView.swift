@@ -130,15 +130,10 @@ struct ContentView: View {
                     )
                 
                 mainLayout
-                    .frame(height: vm.notchState == .open ? vm.notchSize.height : nil)
-                    .conditionalModifier(true) { view in
-                        let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
-                        let closeAnimation = Animation.spring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)
-                        
-                        return view
-                            .animation(vm.notchState == .open ? openAnimation : closeAnimation, value: vm.notchState)
-                            .animation(.smooth, value: gestureProgress)
-                    }
+                    .frame(height: vm.notchState == .open ? vm.animatingNotchSize?.height ?? vm.notchSize.height : nil)
+                    .animation(.smooth, value: vm.animatingNotchSize)
+                    .animation(.smooth, value: vm.notchState)
+                    .animation(.smooth, value: gestureProgress)
                     .contentShape(Rectangle())
                     .onHover { hovering in
                         handleHover(hovering)
@@ -219,7 +214,7 @@ struct ContentView: View {
             }
         }
         .padding(.bottom, 8)
-        .frame(maxWidth: windowSize.width, maxHeight: vm.notchState == .open ? vm.notchSize.height + shadowPadding : windowSize.height, alignment: .top)
+        .frame(maxWidth: windowSize.width, maxHeight: vm.notchState == .open ? (vm.animatingNotchSize?.height ?? vm.notchSize.height) + shadowPadding : windowSize.height, alignment: .top)
         .compositingGroup()
         .scaleEffect(
             x: gestureScale,
@@ -405,11 +400,7 @@ struct ContentView: View {
                         ChatView(sessionId: sessionId)
                     }
                 }
-                .transition(
-                    .scale(scale: 0.8, anchor: .top)
-                    .combined(with: .opacity)
-                    .animation(.smooth(duration: 0.35))
-                )
+                .transition(.opacity.animation(.easeInOut(duration: 0.25)))
                 .zIndex(1)
                 .allowsHitTesting(vm.notchState == .open)
                 .opacity(gestureProgress != 0 ? 1.0 - min(abs(gestureProgress) * 0.1, 0.3) : 1.0)
@@ -557,12 +548,10 @@ struct ContentView: View {
     }
 
     private func doOpen() {
-        // First, notify AppDelegate to set window height BEFORE animation starts
-        NotificationCenter.default.post(name: Notification.Name.notchWillOpen, object: nil)
-        // Then start the animation
-        withAnimation(animationSpring) {
-            vm.open()
-        }
+        NSLog("🚀 [doOpen] START")
+        // ViewModel.open() sets notchState and sends notification
+        // AppDelegate handles animatingNotchSize entirely
+        vm.open()
     }
 
     // MARK: - Hover Management

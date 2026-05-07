@@ -20,6 +20,9 @@ class BoringViewModel: NSObject, ObservableObject {
     @Published var contentType: ContentType = .normal
     @Published private(set) var notchState: NotchState = .closed
 
+    // Temporary size during window animation - synced with NSWindow animator
+    @Published var animatingNotchSize: CGSize? = nil
+
     @Published var dragDetectorTargeting: Bool = false
     @Published var generalDropTargeting: Bool = false
     @Published var dropZoneTargeting: Bool = false
@@ -87,10 +90,13 @@ class BoringViewModel: NSObject, ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 guard let self = self, self.notchState == .open else { return }
-                // Notify AppDelegate to resize window with animation
-                NotificationCenter.default.post(name: Notification.Name.notchWillResize, object: nil)
-                // Update notchSize immediately to sync with window animation
-                self.notchSize = self.effectiveOpenNotchSize
+                let targetSize = self.effectiveOpenNotchSize
+                // Notify AppDelegate to animate window with animatingNotchSize
+                NotificationCenter.default.post(
+                    name: Notification.Name.notchWillResize,
+                    object: nil,
+                    userInfo: ["targetSize": targetSize]
+                )
             }
             .store(in: &cancellables)
 
@@ -245,11 +251,17 @@ class BoringViewModel: NSObject, ObservableObject {
     }
 
     func open() {
-        // Notify AppDelegate to set window height immediately before animation
-        NotificationCenter.default.post(name: Notification.Name.notchWillOpen, object: nil)
-
-        self.notchSize = effectiveOpenNotchSize
+        // Only set notchState - animatingNotchSize is controlled by AppDelegate
+        // AppDelegate sets animatingNotchSize when receiving notchWillOpen notification
         self.notchState = .open
+        NSLog("📦 [ViewModel.open] notchState set to OPEN")
+
+        // Notify AppDelegate to animate window
+        NotificationCenter.default.post(
+            name: Notification.Name.notchWillOpen,
+            object: nil,
+            userInfo: ["targetSize": effectiveOpenNotchSize]
+        )
 
         // Force music information update when notch is opened
         MusicManager.shared.forceUpdate()
