@@ -15,7 +15,7 @@ struct SessionRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
-            // Left side: clickable area for ChatView
+            // Left side: status and text
             HStack(alignment: .center, spacing: 10) {
                 statusIndicator
                     .frame(width: 16, height: 16)
@@ -32,10 +32,6 @@ struct SessionRow: View {
                         .lineLimit(1)
                 }
                 .frame(height: 34, alignment: .leading)
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                coordinator.openChat(sessionId: session.id)
             }
 
             Spacer(minLength: 0)
@@ -57,6 +53,10 @@ struct SessionRow: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
+        .onTapGesture {
+            // Open ChatView when clicking anywhere except buttons
+            coordinator.openChat(sessionId: session.id)
+        }
     }
 
     // MARK: - Terminal Button

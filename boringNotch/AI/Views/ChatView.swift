@@ -46,7 +46,7 @@ struct ChatView: View {
                     statusIndicator(for: session.phase)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 4)
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 8)
@@ -55,7 +55,6 @@ struct ChatView: View {
         }
         .buttonStyle(.plain)
         .onHover { isHeaderHovered = $0 }
-        .padding(.horizontal, 12)
         .padding(.vertical, 8)
     }
 
@@ -75,7 +74,7 @@ struct ChatView: View {
                         .foregroundColor(.white.opacity(0.4))
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 4)
             .padding(.vertical, 12)
         }
     }
@@ -176,7 +175,7 @@ struct ChatView: View {
             .buttonStyle(.plain)
             .disabled(!canSendMessage || inputText.isEmpty)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 4)
         .padding(.vertical, 12)
         .background(Color.black.opacity(0.2))
     }

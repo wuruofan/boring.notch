@@ -89,7 +89,9 @@ class BoringViewModel: NSObject, ObservableObject {
                 guard let self = self, self.notchState == .open else { return }
                 // Notify AppDelegate to resize window synchronously for tab switching
                 NotificationCenter.default.post(name: Notification.Name.notchWillResize, object: nil)
-                self.notchSize = self.effectiveOpenNotchSize
+                withAnimation(.smooth(duration: 0.25)) {
+                    self.notchSize = self.effectiveOpenNotchSize
+                }
             }
             .store(in: &cancellables)
 
