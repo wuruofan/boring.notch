@@ -368,15 +368,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             forName: Notification.Name.notchWillResize, object: nil, queue: .main
         ) { [weak self] notification in
             guard let self = self, let window = self.window else { return }
-            let targetHeight = self.vm.effectiveOpenNotchSize.height + shadowPadding
+            let targetSize = self.vm.effectiveOpenNotchSize
+            let targetHeight = targetSize.height + shadowPadding
+            let targetWidth = targetSize.width
             let screenFrame = window.screen?.frame ?? NSScreen.main?.frame ?? .zero
             let currentFrame = window.frame
-            // Only adjust if height actually changes
-            if currentFrame.height != targetHeight {
+            // Adjust if height or width changes
+            if currentFrame.height != targetHeight || currentFrame.width != targetWidth {
                 let newFrame = NSRect(
-                    x: currentFrame.origin.x,
+                    x: screenFrame.origin.x + (screenFrame.width / 2) - targetWidth / 2,
                     y: screenFrame.origin.y + screenFrame.height - targetHeight,
-                    width: currentFrame.width,
+                    width: targetWidth,
                     height: targetHeight
                 )
                 NSAnimationContext.runAnimationGroup { context in

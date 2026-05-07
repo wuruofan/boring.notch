@@ -18,7 +18,6 @@ struct ChatView: View {
             messageArea
             bottomBar
         }
-        .background(Color.black)
     }
 
     // MARK: - Header
