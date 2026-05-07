@@ -373,11 +373,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let targetWidth = targetSize.width
             let screenFrame = window.screen?.frame ?? NSScreen.main?.frame ?? .zero
             let currentFrame = window.frame
+            let currentTopY = currentFrame.origin.y + currentFrame.height
+
             // Adjust if height or width changes
             if currentFrame.height != targetHeight || currentFrame.width != targetWidth {
+                // New y should keep the top position fixed
+                let newY = currentTopY - targetHeight
                 let newFrame = NSRect(
                     x: screenFrame.origin.x + (screenFrame.width / 2) - targetWidth / 2,
-                    y: screenFrame.origin.y + screenFrame.height - targetHeight,
+                    y: newY,
                     width: targetWidth,
                     height: targetHeight
                 )
