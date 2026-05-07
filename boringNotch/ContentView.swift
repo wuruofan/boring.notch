@@ -403,6 +403,8 @@ struct ContentView: View {
                         ShelfView()
                     case .ai:
                         AIExpandedView()
+                    case .chat(let sessionId):
+                        ChatView(sessionId: sessionId)
                     }
                 }
                 .transition(
