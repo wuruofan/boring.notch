@@ -5,6 +5,7 @@ import Defaults
 /// Single session row display.
 struct SessionRow: View {
     let session: AISessionState
+    @ObservedObject var coordinator = BoringViewCoordinator.shared
     @State private var isHovered = false
     @Default(.aiSleepAnimationEnabled) private var sleepAnimationEnabled
 
@@ -34,8 +35,7 @@ struct SessionRow: View {
             }
             .contentShape(Rectangle())
             .onTapGesture {
-                // TODO: Open ChatView
-                print("SessionRow clicked: open ChatView for \(session.id.prefix(8))")
+                coordinator.openChat(sessionId: session.id)
             }
 
             Spacer(minLength: 0)
