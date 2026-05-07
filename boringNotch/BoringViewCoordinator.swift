@@ -55,6 +55,18 @@ class BoringViewCoordinator: ObservableObject {
     static let shared = BoringViewCoordinator()
 
     @Published var currentView: NotchViews = .home
+    @Published var selectedChatSession: String? = nil
+
+    func openChat(sessionId: String) {
+        selectedChatSession = sessionId
+        currentView = .chat(sessionId: sessionId)
+    }
+
+    func closeChat() {
+        selectedChatSession = nil
+        currentView = .ai
+    }
+
     @Published var helloAnimationRunning: Bool = false
     private var sneakPeekDispatch: DispatchWorkItem?
     private var expandingViewDispatch: DispatchWorkItem?
