@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Session list container with scroll support.
-/// Height adapts to session count (capped at 5).
+/// Height adapts to session count (capped at 3).
 struct SessionList: View {
     @ObservedObject var aiManager = AIManager.shared
 

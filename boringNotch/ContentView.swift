@@ -401,8 +401,6 @@ struct ContentView: View {
                         NotchHomeView(albumArtNamespace: albumArtNamespace)
                     case .shelf:
                         ShelfView()
-                    case .ai:
-                        AIExpandedView()
                     case .chat(let sessionId):
                         ChatView(sessionId: sessionId)
                     }

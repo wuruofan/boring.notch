@@ -61,6 +61,7 @@ func toggleSneakPeek(status: Bool, type: SneakContentType, duration: TimeInterva
 ## AI 集成设计
 
 详见 `docs/ai-integration-design.md`，目标是：
+
 - 收起态同时显示音乐和 AI 状态（双实况胶囊）
 - AI 请求时无需跳转终端即可 approve/deny/reply
 - 支持多 Agent（Claude, Codex, Cursor 等）
@@ -95,12 +96,13 @@ Claude-Island 已实现 Claude Code 状态监控和权限审批，关键技术�
 
 ### 两种 DispatchSource 监听机制
 
-| 监听类型 | 目标 | DispatchSource | 用途 |
-|----------|------|----------------|------|
-| **Socket 监听** | `/tmp/*.sock` | `DispatchSourceRead` | 接收 hook 事件 |
-| **JSONL 监听** | `~/.claude/projects/*.jsonl` | `DispatchSourceFileSystemObject` | 检测 ESC 中断 |
+| 监听类型        | 目标                         | DispatchSource                   | 用途           |
+| --------------- | ---------------------------- | -------------------------------- | -------------- |
+| **Socket 监听** | `/tmp/*.sock`                | `DispatchSourceRead`             | 接收 hook 事件 |
+| **JSONL 监听**  | `~/.claude/projects/*.jsonl` | `DispatchSourceFileSystemObject` | 检测 ESC 中断  |
 
 **Socket 监听实现**（参考 `AIHookServerCore.swift`）：
+
 ```swift
 // 监听 Unix Socket 新连接
 acceptSource = DispatchSource.makeReadSource(fileDescriptor: serverSocket, queue: queue)
@@ -109,6 +111,7 @@ acceptSource?.resume()
 ```
 
 **JSONL 监听实现**（参考 Claude-Island `JSONLInterruptWatcher.swift`）：
+
 ```swift
 // 监听文件写入事件（实时检测 ESC 中断）
 let source = DispatchSource.makeFileSystemObjectSource(
@@ -125,6 +128,7 @@ source.resume()
 **文件**: `ClaudeIsland/Services/Session/JSONLInterruptWatcher.swift`
 
 当 session 进入 `processing` 状态时启动监听 JSONL 文件，检测中断模式：
+
 ```swift
 // 中断内容模式
 private static let interruptContentPatterns = [
@@ -135,6 +139,7 @@ private static let interruptContentPatterns = [
 ```
 
 **优势**：
+
 - **毫秒级响应**（文件系统事件实时触发）
 - **不影响长任务**（只监听文件，不超时判断）
 - **精确检测**（匹配具体中断内容）
@@ -257,11 +262,14 @@ open <app路径>
 ```
 
 **失败原因：**
+
 - `killall` 需精确匹配进程名（大小写敏感）
 - BoringNotch 有子进程守护（XPC Helper）
 - DerivedData 路径可能变化
 
-## 当前分支
+## Progress Tracking (Critical)
 
-- 工作分支: `ai-integration`
-- 主分支: `main`
+- Before commit: Call `/progress-save` to update PROGRESS.md
+- When resuming work: Call `/progress-restore` to restore session context
+- When major task completed: Call `/progress-archive` to archive history
+- Before new session: Call `/progress-summary` to get session context

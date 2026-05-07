@@ -27,14 +27,12 @@ public enum NotchState {
 public enum NotchViews: Equatable {
     case home
     case shelf
-    case ai
     case chat(sessionId: String)
 
     public static func == (lhs: NotchViews, rhs: NotchViews) -> Bool {
         switch (lhs, rhs) {
         case (.home, .home): return true
         case (.shelf, .shelf): return true
-        case (.ai, .ai): return true
         case (.chat(let l), .chat(let r)): return l == r
         default: return false
         }
