@@ -158,6 +158,7 @@
 		AIAI00210000000000000002 /* SessionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00200000000000000002 /* SessionRow.swift */; };
 		AIAI00210000000000000003 /* SessionList.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00200000000000000003 /* SessionList.swift */; };
 		AIAI00210000000000000004 /* ApprovalButtons.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00200000000000000004 /* ApprovalButtons.swift */; };
+		AIAI00210000000000000005 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00200000000000000005 /* ChatView.swift */; };
 		AIAI00180000000000000001 /* AIStatusAnimationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00170000000000000001 /* AIStatusAnimationView.swift */; };
 		AIAI001A00000000000001 /* CompactCapsuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI00190000000000000001 /* CompactCapsuleView.swift */; };
 		AIAI001C0000000000000001 /* AISettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AIAI001B0000000000000001 /* AISettingsView.swift */; };
@@ -354,6 +355,7 @@
 		AIAI00200000000000000002 /* SessionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRow.swift; sourceTree = "<group>"; };
 		AIAI00200000000000000003 /* SessionList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionList.swift; sourceTree = "<group>"; };
 		AIAI00200000000000000004 /* ApprovalButtons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalButtons.swift; sourceTree = "<group>"; };
+		AIAI00200000000000000005 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		AIAI00170000000000000001 /* AIStatusAnimationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIStatusAnimationView.swift; sourceTree = "<group>"; };
 		AIAI00190000000000000001 /* CompactCapsuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactCapsuleView.swift; sourceTree = "<group>"; };
 		AIAI001B0000000000000001 /* AISettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AISettingsView.swift; sourceTree = "<group>"; };
@@ -879,6 +881,7 @@
 				AIAI00200000000000000002 /* SessionRow.swift */,
 				AIAI00200000000000000003 /* SessionList.swift */,
 				AIAI00200000000000000004 /* ApprovalButtons.swift */,
+				AIAI00200000000000000005 /* ChatView.swift */,
 				AIAI00170000000000000001 /* AIStatusAnimationView.swift */,
 				AIAI00190000000000000001 /* CompactCapsuleView.swift */,
 				AIAI001B0000000000000001 /* AISettingsView.swift */,
@@ -1206,6 +1209,7 @@
 				AIAI00210000000000000002 /* SessionRow.swift in Sources */,
 				AIAI00210000000000000003 /* SessionList.swift in Sources */,
 				AIAI00210000000000000004 /* ApprovalButtons.swift in Sources */,
+				AIAI00210000000000000005 /* ChatView.swift in Sources */,
 				AIAI00180000000000000001 /* AIStatusAnimationView.swift in Sources */,
 				AIAI001A00000000000001 /* CompactCapsuleView.swift in Sources */,
 				AIAI001C0000000000000001 /* AISettingsView.swift in Sources */,
