@@ -355,3 +355,47 @@ NotificationCenter.default.addObserver(forName: .notchWillOpen, ...) {
 3. **@Published 状态** - 是否多处同时修改？
 4. **线程冲突** - SwiftUI 和 AppKit 是否同时操作同一状态？
 5. **单一修改** - 每次只改一处，逐步验证
+
+## 视图切换动画架构（关键）
+
+三种动画场景，触发方式不同：
+
+| 场景 | 触发值 | SwiftUI 内容动画 | 窗口动画 |
+|------|--------|-----------------|---------|
+| **紧凑→展开** | `notchState` → `.open` | `.animation(spring 0.42s, value: notchState)` + `.animation(smooth 0.35s, value: notchState)` | AppKit `notchWillOpen` 0.35s |
+| **展开→紧凑** | `notchState` → `.closed` | 同上 | AppKit close |
+| **视图切换** (home↔shelf↔chat) | `currentView` 变化 (notchState 不变) | Timer 驱动 notchSize 逐帧插值 | Timer 驱动 window.setFrame 逐帧 |
+
+### 核心问题与解决方案
+
+**问题1**: `NSAnimationContext.runAnimationGroup` + `window.animator().setFrame()` 在 expand 方向会振荡（窗口反复跳回原位），不可靠。
+
+**解决**: 放弃 NSAnimationContext，用 `Timer.scheduledTimer(0.016s, ~60fps)` 手动驱动 `window.setFrame(_:display:)`，quad-easeInOut 曲线。
+
+**问题2**: sink 中设置 `notchSize = targetSize` 会立即改变 NSHostingView intrinsic size，导致窗口 snap。
+
+**解决**: sink **只发通知**，不改 notchSize。notchSize 由 AppDelegate 的 Timer 逐帧更新。
+
+**问题3**: expand 方向 60fps 更新 notchSize → matchedGeometryEffect hero 动画目标位置每帧变化 → "两个动画"（正常的 transform + 抖动的 layout）。
+
+**解决**: expand 方向 notchSize **从第一帧就设为目标值**（hero 目标稳定不变），shrink 方向逐帧插值（保持圆角跟随窗口）。
+
+```swift
+// boringNotchApp.swift notchWillResize handler — 最终方案
+let notchH: CGFloat = startNotchH < endNotchH
+    ? endNotchH  // expand: target immediately → hero stable
+    : startNotchH + (endNotchH - startNotchH) * eased  // shrink: interpolate
+
+var tx = Transaction(animation: nil)
+tx.disablesAnimations = true
+withTransaction(tx) {
+    self.vm.notchSize = CGSize(width: targetWidth, height: notchH)
+}
+```
+
+### 相关文件
+
+- `boringNotchApp.swift` — notchWillOpen / notchWillResize 窗口动画（~line 350-465）
+- `ContentView.swift` — 视图层动画绑定（~line 134-220）
+- `models/BoringViewModel.swift` — sink 只发通知不改 notchSize（~line 87-105）
+- `components/Notch/NotchHomeView.swift` — 封面 hero animation（~line 89-90）
