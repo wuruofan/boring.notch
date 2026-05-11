@@ -434,12 +434,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
                     window.setFrame(currentFrame, display: true)
 
-                    // Expand (shelf→home): keep notchSize at TARGET from the start.
-                    // Stable destination → matchedGeometryEffect hero is smooth.
-                    // Shrink (home→shelf): interpolate notchSize → window leads, content follows.
-                    let notchH: CGFloat = startNotchH < endNotchH
-                        ? endNotchH  // expand: target immediately, hero destination stable
-                        : startNotchH + (endNotchH - startNotchH) * eased  // shrink: interpolate
+                    // Only expand→home uses target-immediately (hero needs stable destination).
+                    // All other directions interpolate for smooth height tracking.
+                    let isExpandToHome: Bool = {
+                        if case .home = self.coordinator.currentView { return startNotchH < endNotchH }
+                        return false
+                    }()
+                    let notchH: CGFloat = isExpandToHome
+                        ? endNotchH
+                        : startNotchH + (endNotchH - startNotchH) * eased
 
                     var tx = Transaction(animation: nil)
                     tx.disablesAnimations = true

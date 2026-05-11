@@ -157,9 +157,9 @@ class BoringViewModel: NSObject, ObservableObject {
     var effectiveOpenNotchSize: CGSize {
         let baseHeight = openNotchSize.height
 
-        // Chat view: fixed 600×480
+        // Chat view: fixed 640×480 (width matches home/shelf for consistency)
         if case .chat(_) = coordinator.currentView {
-            return CGSize(width: 600, height: 480)
+            return CGSize(width: 640, height: 480)
         }
 
         // Home view with AI sessions
