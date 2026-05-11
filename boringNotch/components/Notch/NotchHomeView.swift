@@ -27,6 +27,7 @@ struct MusicPlayerView: View {
 struct AlbumArtView: View {
     @ObservedObject var musicManager = MusicManager.shared
     @ObservedObject var vm: BoringViewModel
+    @ObservedObject var coordinator = BoringViewCoordinator.shared
     let albumArtNamespace: Namespace.ID
 
     var body: some View {
@@ -67,7 +68,7 @@ struct AlbumArtView: View {
             }
             .buttonStyle(PlainButtonStyle())
             .scaleEffect(musicManager.isPlaying ? 1 : 0.85)
-            
+
             albumArtDarkOverlay
         }
     }
@@ -86,6 +87,7 @@ struct AlbumArtView: View {
             .resizable()
             .aspectRatio(1, contentMode: .fit)
             .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
+            .animation(.easeInOut(duration: 0.35), value: coordinator.currentView)
             .clipped()
             .clipShape(
                 RoundedRectangle(

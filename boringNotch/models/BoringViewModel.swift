@@ -88,10 +88,14 @@ class BoringViewModel: NSObject, ObservableObject {
         coordinator.$currentView
             .removeDuplicates()
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
+            .sink { [weak self] newView in
                 guard let self = self, self.notchState == .open else { return }
+                let oldHeight = self.notchSize.height
                 let targetSize = self.effectiveOpenNotchSize
-                // Notify AppDelegate to animate window with animatingNotchSize
+                NSLog("🔄 [VM.sink] notchSize %.0f → %.0f | %@",
+                      oldHeight, targetSize.height, String(describing: newView))
+                // Do NOT set notchSize here — it forces NSHostingView to snap the window.
+                // AppDelegate animates the window first; completion handler then updates notchSize.
                 NotificationCenter.default.post(
                     name: Notification.Name.notchWillResize,
                     object: nil,
@@ -251,8 +255,9 @@ class BoringViewModel: NSObject, ObservableObject {
     }
 
     func open() {
-        // Only set notchState - animatingNotchSize is controlled by AppDelegate
-        // AppDelegate sets animatingNotchSize when receiving notchWillOpen notification
+        // Notify AppDelegate to set window height immediately before animation
+        // This order ensures SwiftUI sees notchSize change before notchState triggers animation
+        self.notchSize = effectiveOpenNotchSize
         self.notchState = .open
         NSLog("📦 [ViewModel.open] notchState set to OPEN")
 
@@ -281,7 +286,7 @@ class BoringViewModel: NSObject, ObservableObject {
 
         // Set the current view to shelf if it contains files and the user enables openShelfByDefault
         // Otherwise, if the user has not enabled openLastShelfByDefault, set the view to home
-    if !ShelfStateViewModel.shared.isEmpty && Defaults[.openShelfByDefault] {
+        if !ShelfStateViewModel.shared.isEmpty && Defaults[.openShelfByDefault] {
             coordinator.currentView = .shelf
         } else if !coordinator.openLastTabByDefault {
             coordinator.currentView = .home

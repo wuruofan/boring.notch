@@ -40,6 +40,8 @@ struct ContentView: View {
 
     // Shared interactive spring for movement/resizing to avoid conflicting animations
     private let animationSpring = Animation.interactiveSpring(response: 0.38, dampingFraction: 0.8, blendDuration: 0)
+    // Animation for matchedGeometryEffect hero transitions - matches NSWindow timing
+    private let heroAnimation = Animation.easeInOut(duration: 0.35)
 
     private let extendedHoverPadding: CGFloat = 30
     private let zeroHeightHoverPadding: CGFloat = 10
@@ -130,9 +132,8 @@ struct ContentView: View {
                     )
                 
                 mainLayout
-                    .frame(height: vm.notchState == .open ? vm.animatingNotchSize?.height ?? vm.notchSize.height : nil)
-                    .animation(.smooth, value: vm.animatingNotchSize)
-                    .animation(.smooth, value: vm.notchState)
+                    .frame(height: vm.notchState == .open ? vm.notchSize.height : nil)
+                    .animation(.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0), value: vm.notchState)
                     .animation(.smooth, value: gestureProgress)
                     .contentShape(Rectangle())
                     .onHover { hovering in
@@ -214,7 +215,8 @@ struct ContentView: View {
             }
         }
         .padding(.bottom, 8)
-        .frame(maxWidth: windowSize.width, maxHeight: vm.notchState == .open ? (vm.animatingNotchSize?.height ?? vm.notchSize.height) + shadowPadding : windowSize.height, alignment: .top)
+        .frame(maxWidth: windowSize.width, maxHeight: vm.notchState == .open ? vm.notchSize.height + shadowPadding : windowSize.height, alignment: .top)
+        .animation(.smooth(duration: 0.35), value: vm.notchState)
         .compositingGroup()
         .scaleEffect(
             x: gestureScale,
@@ -400,7 +402,6 @@ struct ContentView: View {
                         ChatView(sessionId: sessionId)
                     }
                 }
-                .transition(.opacity.animation(.easeInOut(duration: 0.25)))
                 .zIndex(1)
                 .allowsHitTesting(vm.notchState == .open)
                 .opacity(gestureProgress != 0 ? 1.0 - min(abs(gestureProgress) * 0.1, 0.3) : 1.0)
@@ -441,6 +442,7 @@ struct ContentView: View {
                         cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed)
                 )
                 .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
+                .animation(heroAnimation, value: coordinator.currentView)
                 .frame(
                     width: max(0, vm.effectiveClosedNotchHeight - 12),
                     height: max(0, vm.effectiveClosedNotchHeight - 12)
@@ -503,6 +505,7 @@ struct ContentView: View {
                         )
                         .frame(width: 50, alignment: .center)
                         .matchedGeometryEffect(id: "spectrum", in: albumArtNamespace)
+                        .animation(heroAnimation, value: coordinator.currentView)
                         .mask {
                             AudioSpectrumView(isPlaying: $musicManager.isPlaying)
                                 .frame(width: 16, height: 12)

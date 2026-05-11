@@ -54,7 +54,18 @@ struct ExpandedItem {
 class BoringViewCoordinator: ObservableObject {
     static let shared = BoringViewCoordinator()
 
-    @Published var currentView: NotchViews = .home
+    @Published var currentView: NotchViews = .home {
+        didSet {
+            // Sync animatingNotchSize BEFORE SwiftUI renders new view
+            // This prevents "nan" when ContentView.onAppear reads animatingNotchSize
+            if let appDelegate = NSApp.delegate as? AppDelegate,
+               appDelegate.vm.notchState == .open {
+                appDelegate.vm.animatingNotchSize = appDelegate.vm.notchSize
+                NSLog("⚡️ [Coordinator.currentView didSet] sync animatingNotchSize=%.0f for view=%@",
+                      appDelegate.vm.notchSize.height, String(describing: currentView))
+            }
+        }
+    }
     @Published var selectedChatSession: String? = nil
 
     func openChat(sessionId: String) {

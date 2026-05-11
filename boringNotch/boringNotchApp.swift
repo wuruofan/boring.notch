@@ -69,6 +69,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var dragDetectors: [String: DragDetector] = [:] // UUID -> DragDetector
     var aiManager = AIManager.shared
     private var notchSizeCancellable: AnyCancellable?
+    // Timer for syncing SwiftUI frame with NSWindow animation during shrink
+    var resizeTimer: Timer?
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
@@ -357,8 +359,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             NSLog("🪟 [AppDelegate.notchWillOpen] START: targetHeight=%.0f", targetHeight)
 
-            // Set animatingNotchSize BEFORE starting window animation
-            // This makes SwiftUI frame height match target immediately (no animation)
             self.vm.animatingNotchSize = targetSize
 
             let newFrame = NSRect(
@@ -367,13 +367,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 width: windowSize.width,
                 height: targetHeight
             )
-            // Use NSAnimationContext for smooth window animation
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.35
                 context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 window.animator().setFrame(newFrame, display: true)
             } completionHandler: {
-                // Animation complete - update notchSize and clear animatingNotchSize
                 Task { @MainActor in
                     self.vm.notchSize = targetSize
                     self.vm.animatingNotchSize = nil
@@ -392,13 +390,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let screenFrame = window.screen?.frame ?? NSScreen.main?.frame ?? .zero
             let currentFrame = window.frame
             let currentTopY = currentFrame.origin.y + currentFrame.height
+            let currentHeight = currentFrame.height
 
-            // Set animatingNotchSize for SwiftUI frame during animation
-            self.vm.animatingNotchSize = targetSize
+            NSLog("🔄 [AppDelegate.notchWillResize] currentHeight=%.0f, targetHeight=%.0f", currentHeight, targetHeight)
 
-            // Adjust if height or width changes
             if currentFrame.height != targetHeight || currentFrame.width != targetWidth {
-                // New y should keep the top position fixed
                 let newY = currentTopY - targetHeight
                 let newFrame = NSRect(
                     x: screenFrame.origin.x + (screenFrame.width / 2) - targetWidth / 2,
@@ -406,22 +402,65 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     width: targetWidth,
                     height: targetHeight
                 )
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.35
-                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                    window.animator().setFrame(newFrame, display: true)
-                } completionHandler: {
-                    // Animation complete - update notchSize and clear animatingNotchSize
-                    Task { @MainActor in
-                        self.vm.notchSize = targetSize
-                        self.vm.animatingNotchSize = nil
+
+                let startNotchH = self.vm.notchSize.height
+                let endNotchH = targetSize.height
+
+                NSLog("🪟 [Resize] BEGIN win:%.0f→%.0f notch:%.0f→%.0f view=%@",
+                      currentHeight, targetHeight, startNotchH, endNotchH,
+                      String(describing: self.coordinator.currentView))
+
+                // Timer-driven animation: interpolate BOTH window frame & notchSize
+                // on the same easeInOut curve. Avoids NSAnimationContext oscillation.
+                self.resizeTimer?.invalidate()
+                let startFrame = window.frame
+                let endFrame = newFrame
+                let startTime = CACurrentMediaTime()
+                let duration: CFTimeInterval = 0.35
+                var tick = 0
+
+                self.resizeTimer = Timer.scheduledTimer(withTimeInterval: 0.016, repeats: true) { [weak self] timer in
+                    guard let self = self, let window = self.window else { timer.invalidate(); return }
+                    tick += 1
+                    let elapsed = CACurrentMediaTime() - startTime
+                    let t = min(1.0, elapsed / duration)
+                    let eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+
+                    let currentH = startFrame.height + (endFrame.height - startFrame.height) * eased
+                    let currentW = startFrame.width + (endFrame.width - startFrame.width) * eased
+                    let currentY = startFrame.origin.y + (endFrame.origin.y - startFrame.origin.y) * eased
+                    let currentX = startFrame.origin.x + (endFrame.origin.x - startFrame.origin.x) * eased
+                    let currentFrame = NSRect(x: currentX, y: currentY, width: currentW, height: currentH)
+
+                    window.setFrame(currentFrame, display: true)
+
+                    // Expand (shelf→home): keep notchSize at TARGET from the start.
+                    // Stable destination → matchedGeometryEffect hero is smooth.
+                    // Shrink (home→shelf): interpolate notchSize → window leads, content follows.
+                    let notchH: CGFloat = startNotchH < endNotchH
+                        ? endNotchH  // expand: target immediately, hero destination stable
+                        : startNotchH + (endNotchH - startNotchH) * eased  // shrink: interpolate
+
+                    var tx = Transaction(animation: nil)
+                    tx.disablesAnimations = true
+                    withTransaction(tx) {
+                        self.vm.notchSize = CGSize(width: targetWidth, height: notchH)
                     }
-                }
-            } else {
-                // No size change - just clear animatingNotchSize
-                Task { @MainActor in
-                    self.vm.notchSize = targetSize
-                    self.vm.animatingNotchSize = nil
+
+                    if tick <= 3 || tick % 5 == 0 {
+                        NSLog("🪟 [Resize] t=%d eased=%.3f win=(%.0f,%.0f,%.0f,%.0f) notchH=%.1f",
+                              tick, eased, currentX, currentY, currentW, currentH, notchH)
+                    }
+
+                    if t >= 1.0 {
+                        var tx = Transaction(animation: nil)
+                        tx.disablesAnimations = true
+                        withTransaction(tx) { self.vm.notchSize = targetSize }
+                        timer.invalidate()
+                        self.resizeTimer = nil
+                        NSLog("🪟 [Resize] END win=(%.0f,%.0f %.0fx%.0f) notch=%.0f ms=%.0f",
+                              currentX, currentY, currentW, currentH, targetSize.height, elapsed * 1000)
+                    }
                 }
             }
         }
@@ -533,28 +572,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Monitor notchSize changes to dynamically adjust window height when AI is active
-        vm.$notchSize
-            .removeDuplicates()
-            .receive(on: RunLoop.main)
-            .sink { [weak self] newSize in
-                guard let self = self, self.vm.notchState == .open, let window = self.window else { return }
-                // Animate window resize when notch is open
-                let newHeight = newSize.height + shadowPadding
-                let currentFrame = window.frame
-                let newFrame = NSRect(
-                    x: currentFrame.origin.x,
-                    y: currentFrame.origin.y + currentFrame.height - newHeight,
-                    width: currentFrame.width,
-                    height: newHeight
-                )
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.3
-                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                    window.animator().setFrame(newFrame, display: true)
-                }
-            }
-            .store(in: &vm.cancellables)
+        // Note: vm.$notchSize observer removed - notchWillResize handles all window resize animations
 
         previousScreens = NSScreen.screens
     }
