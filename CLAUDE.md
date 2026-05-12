@@ -11,20 +11,48 @@ boringNotch/
 ├── boringNotchApp.swift        # 应用入口、AppDelegate
 ├── BoringViewCoordinator.swift # 视图协调器（核心状态管理、Peek/Expand）
 ├── ContentView.swift           # 主视图容器（Compact/Expanded 渲染）
+├── AI/                         # AI Agent 状态感知（核心新增）
+│   ├── AIManager.swift         # AI 状态聚合管理
+│   ├── AIHookServer.swift      # Unix Socket 接收 Hook 事件
+│   ├── AIHookInstaller.swift   # Hook 自动安装
+│   ├── Models/
+│   │   ├── AIHookEvent.swift   # Hook 事件模型
+│   │   └── AISessionState.swift # Session 状态模型
+│   ├── Tmux/
+│   │   ├── TmuxController.swift      # Tmux 会话控制
+│   │   ├── TmuxTargetFinder.swift    # 目标查找
+│   │   └── ToolApprovalHandler.swift # approve/deny 发送
+│   └── Views/
+│       ├── ChatView.swift           # Chat 界面
+│       ├── SessionList.swift        # Session 列表
+│       ├── SessionRow.swift         # Session 行
+│       ├── CompactCapsuleView.swift # 紧凑态胶囊
+│       ├── AILiveActivity.swift     # Live Activity
+│       └── ...
+├── animations/                 # 动画相关
+│   ├── drop.swift
+│   └── HelloAnimation.swift
 ├── models/
 │   ├── BoringViewModel.swift   # 窗口级状态（手势、拖放）
 │   ├── PlaybackState.swift     # 音乐播放状态
 │   └── Constants.swift         # Defaults Keys 定义
 ├── managers/
 │   ├── MusicManager.swift      # 音乐状态聚合、控制器切换
-│   └── VolumeManager.swift     # 音量控制
+│   ├── VolumeManager.swift     # 音量控制
+│   └── ...
 ├── MediaControllers/           # 媒体控制器协议实现
 ├── components/
 │   ├── Notch/                  # Notch 核心 UI
 │   ├── Music/                  # 音乐相关 UI
 │   ├── Live activities/        # Live Activity UI
-│   └── Settings/               # 设置界面
-└── observers/                  # MediaKeyInterceptor 等
+│   ├── Shelf/                  # Shelf 功能（拖放、分享）
+│   ├── Settings/               # 设置界面
+│   └── ...
+├── extensions/                 # Swift 扩展
+├── helpers/                    # 工具类
+├── XPCHelperClient/            # XPC 客户端（与 Helper 通信）
+├── observers/                  # MediaKeyInterceptor 等
+└── menu/                       # 状态栏菜单
 ```
 
 ## 关键架构
@@ -274,87 +302,13 @@ open <app路径>
 - When major task completed: Call `/progress-archive` to archive history
 - Before new session: Call `/progress-summary` to get session context
 
-## 调试经验（重要）
+## 调试经验
 
-### SwiftUI + AppKit 混合动画调试
+详见 [docs/architecture/animation-debugging.md](docs/architecture/animation-debugging.md)，包含：
 
-**问题场景**：BoringNotch 窗口展开动画涉及 SwiftUI frame height 和 NSWindow animator 同步。
-
-**失败经历**：修改了 9-10 次，尝试了禁用动画、调整 animatingNotchSize 设置时机、移除 withAnimation 等多种方案，全部失败。
-
-**根本原因**：
-1. **NotificationCenter 通知重复发送** - `doOpen()` 和 `ViewModel.open()` 都发送了 `notchWillOpen`，AppDelegate 收到两次 → 两个动画同时启动 → 崩溃
-2. **animatingNotchSize 多处修改** - ContentView、ViewModel、AppDelegate 都在修改同一状态 → 线程冲突
-3. **"height is negative" 错误** - 两次动画同时计算中间帧 → SwiftUI 得到负值 → 崩溃
-
-**正确的调试方法**：
-
-1. **使用 Console.app + NSLog**
-   ```swift
-   NSLog("🚀 [doOpen] START: closedHeight=%.0f, targetHeight=%.0f", ...)
-   NSLog("🪟 [AppDelegate.notchWillOpen] START: targetHeight=%.0f", ...)
-   ```
-   - 在 Console.app 搜索进程名（如 `boringNotch`）
-   - **不要用 print/fputs/文件写入** - 这些在 macOS GUI 应用中经常看不到
-
-2. **追踪数据流每一步**
-   - 从触发点（`doOpen`）到最终执行（`AppDelegate.notchWillOpen`）
-   - 每个关键节点加日志：参数值、状态变化、通知发送
-   - 特别追踪 **NotificationCenter 发送次数**
-
-3. **检查通知监听是否重复注册**
-   ```swift
-   // AppDelegate 可能多次注册同一通知
-   NotificationCenter.default.addObserver(forName: .notchWillOpen, ...)
-   ```
-   - 检查是否有多个 `addObserver` 调用
-   - 检查是否从多处发送同一通知
-
-4. **单一修改原则**
-   - 每次只改一处代码
-   - 测试后再改下一处
-   - **不要一次性修改多个文件的多处代码**
-
-5. **理解 SwiftUI 和 AppKit 动画线程模型**
-   - SwiftUI 动画：在主线程计算中间帧
-   - NSWindow animator：AppKit 动画上下文，可能在不同线程
-   - **避免两者同时修改同一 @Published 状态**
-
-### 正确的动画同步架构
-
-```swift
-// 原则：单一数据源控制动画状态
-
-// ❌ 错误做法：多处修改 animatingNotchSize
-// ContentView.doOpen: vm.animatingNotchSize = closedSize
-// ViewModel.open: animatingNotchSize = targetSize
-// AppDelegate: animatingNotchSize = targetSize
-
-// ✅ 正确做法：AppDelegate 完全控制 animatingNotchSize
-// ViewModel.open(): 只设置 notchState，发送通知（一次）
-// AppDelegate: 收到通知 → 设置 animatingNotchSize → 启动动画
-
-func open() {
-    self.notchState = .open  // SwiftUI frame 触发变化
-    NotificationCenter.default.post(name: .notchWillOpen, ...)  // 只发送一次
-}
-
-// AppDelegate:
-NotificationCenter.default.addObserver(forName: .notchWillOpen, ...) { 
-    vm.animatingNotchSize = targetSize  // AppDelegate 独占修改权
-    NSAnimationContext.runAnimationGroup { ... }
-}
-```
-
-### 调试清单
-
-遇到动画/崩溃问题时，按此顺序检查：
-
-1. **Console.app 日志** - 是否有重复调用？通知发送几次？
-2. **NotificationCenter** - 是否重复注册监听？重复发送通知？
-3. **@Published 状态** - 是否多处同时修改？
-4. **线程冲突** - SwiftUI 和 AppKit 是否同时操作同一状态？
-5. **单一修改** - 每次只改一处，逐步验证
+- SwiftUI + AppKit 混合动画调试方法
+- NotificationCenter 重复发送问题排查
+- 正确的动画同步架构原则
 
 ## 视图切换动画架构（关键）
 
@@ -376,15 +330,21 @@ NotificationCenter.default.addObserver(forName: .notchWillOpen, ...) {
 
 **解决**: sink **只发通知**，不改 notchSize。notchSize 由 AppDelegate 的 Timer 逐帧更新。
 
-**问题3**: expand 方向 60fps 更新 notchSize → matchedGeometryEffect hero 动画目标位置每帧变化 → "两个动画"（正常的 transform + 抖动的 layout）。
+**问题3**: expand→home 方向 60fps 更新 notchSize → matchedGeometryEffect hero 动画目标位置每帧变化 → "两个动画"。
 
-**解决**: expand 方向 notchSize **从第一帧就设为目标值**（hero 目标稳定不变），shrink 方向逐帧插值（保持圆角跟随窗口）。
+**解决**: **只有 expand→home 方向** notchSize 从第一帧就设为目标值（hero 目标稳定不变），其他所有方向全部逐帧插值。
 
 ```swift
 // boringNotchApp.swift notchWillResize handler — 最终方案
-let notchH: CGFloat = startNotchH < endNotchH
-    ? endNotchH  // expand: target immediately → hero stable
-    : startNotchH + (endNotchH - startNotchH) * eased  // shrink: interpolate
+// Only expand→home uses target-immediately (hero needs stable destination).
+// All other directions interpolate for smooth height tracking.
+let isExpandToHome: Bool = {
+    if case .home = self.coordinator.currentView { return startNotchH < endNotchH }
+    return false
+}()
+let notchH: CGFloat = isExpandToHome
+    ? endNotchH  // expand→home: target immediately → hero stable
+    : startNotchH + (endNotchH - startNotchH) * eased  // others: interpolate
 
 var tx = Transaction(animation: nil)
 tx.disablesAnimations = true
@@ -395,7 +355,8 @@ withTransaction(tx) {
 
 ### 相关文件
 
-- `boringNotchApp.swift` — notchWillOpen / notchWillResize 窗口动画（~line 350-465）
-- `ContentView.swift` — 视图层动画绑定（~line 134-220）
+- `boringNotchApp.swift` — notchWillOpen / notchWillResize 窗口动画（~line 400-470）
+- `ContentView.swift` — 视图层动画绑定
 - `models/BoringViewModel.swift` — sink 只发通知不改 notchSize（~line 87-105）
-- `components/Notch/NotchHomeView.swift` — 封面 hero animation（~line 89-90）
+- `components/Notch/NotchHomeView.swift` — 封面 hero animation
+- `AI/Views/ChatView.swift` — Chat 视图（640×480）

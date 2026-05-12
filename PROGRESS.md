@@ -1,6 +1,6 @@
 # Progress
 
-> Last updated: 2026-04-28
+> Last updated: 2026-05-11
 
 ## 🎯 Current Focus
 <!-- Core tasks in progress, recommended no more than 2 -->
@@ -16,6 +16,9 @@
 ## ✅ Recently Completed
 <!-- Keep only the last 3-5 items to avoid infinite file growth -->
 
+- **2026-05-11**: 视图切换动画全局平滑化
+  - 修复：仅 expand→home 使用目标高度立即设置，其他方向全部插值
+  - Chat view 宽度 600→640 与 home/shelf 保持一致
 - **2026-04-28**: Sessions 状态监听实现并验证成功
   - SessionsWatcher 监听 ~/.claude/sessions/*.json
   - 权威 idle 判断，覆盖所有阶段的 ESC 打断
@@ -59,6 +62,7 @@ sessions busy + Hook → 详细 phase
 |------|------|------|
 | 2026-04-28 | 清理 Darwin Notification 死代码 | ✅ 完成 |
 | 2026-04-28 | Sessions 状态监听实现 | ✅ 完成 |
+| 2026-05-11 | 视图切换动画全局平滑化 | ✅ 完成 |
 | 2026-04-28 | Sessions 状态监听验证 | ✅ 完成 |
 | 2026-04-28 | 僵尸 session 清理 | ✅ 完成 |
 | 2026-04-27 | XPC 推送链路验证 | ✅ 完成 |
