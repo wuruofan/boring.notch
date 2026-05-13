@@ -49,6 +49,13 @@ struct DynamicNotchApp: App {
     }
 }
 
+/// NSHostingView that reports intrinsicContentSize matching its actual frame.
+/// Prevents NSHostingView from vertically centering SwiftUI content
+/// when the content's ideal size is smaller than the window frame.
+class TopAlignedHostingView<Content: View>: NSHostingView<Content> {
+    override var intrinsicContentSize: NSSize { frame.size }
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     var windows: [String: NSWindow] = [:] // UUID -> NSWindow
@@ -251,7 +258,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.disableSkyLight()
         }
 
-        window.contentView = NSHostingView(
+        window.contentView = TopAlignedHostingView(
             rootView: ContentView()
                 .environmentObject(viewModel)
         )
@@ -434,13 +441,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
                     window.setFrame(currentFrame, display: true)
 
-                    // Only expand→home uses target-immediately (hero needs stable destination).
-                    // All other directions interpolate for smooth height tracking.
-                    let isExpandToHome: Bool = {
-                        if case .home = self.coordinator.currentView { return startNotchH < endNotchH }
+                    // Only chat→home uses target-immediately (hero needs stable destination).
+                    // shelf→home and all others interpolate for smooth height tracking.
+                    let isChatToHome: Bool = {
+                        if case .home = self.coordinator.currentView,
+                           case .chat(_) = self.coordinator.previousView { return startNotchH < endNotchH }
                         return false
                     }()
-                    let notchH: CGFloat = isExpandToHome
+                    let notchH: CGFloat = isChatToHome
                         ? endNotchH
                         : startNotchH + (endNotchH - startNotchH) * eased
 
@@ -450,9 +458,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                         self.vm.notchSize = CGSize(width: targetWidth, height: notchH)
                     }
 
-                    if tick <= 3 || tick % 5 == 0 {
-                        NSLog("🪟 [Resize] t=%d eased=%.3f win=(%.0f,%.0f,%.0f,%.0f) notchH=%.1f",
-                              tick, eased, currentX, currentY, currentW, currentH, notchH)
+                    if tick <= 5 || tick % 5 == 0 {
+                        let real = window.frame
+                        let cv = window.contentView?.frame ?? .zero
+                        let realTopY = real.origin.y + real.height
+                        let intendTopY = currentY + currentH
+                        NSLog("🪟 [Resize] t=%d | intend=(%.0f,%.0f,%.0f,%.0f) top=%.0f | real=(%.0f,%.0f,%.0f,%.0f) top=%.0f | cv=(%.0f,%.0f,%.0f,%.0f) | notchH=%.1f | diff_Y=%.1f diff_top=%.1f | view=%@",
+                              tick,
+                              currentX, currentY, currentW, currentH, intendTopY,
+                              real.origin.x, real.origin.y, real.width, real.height, realTopY,
+                              cv.origin.x, cv.origin.y, cv.width, cv.height,
+                              notchH,
+                              real.origin.y - currentY,
+                              realTopY - intendTopY,
+                              String(describing: self.coordinator.currentView))
                     }
 
                     if t >= 1.0 {

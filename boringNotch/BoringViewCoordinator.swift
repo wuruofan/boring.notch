@@ -56,6 +56,7 @@ class BoringViewCoordinator: ObservableObject {
 
     @Published var currentView: NotchViews = .home {
         didSet {
+            if oldValue != currentView { previousView = oldValue }
             // Sync animatingNotchSize BEFORE SwiftUI renders new view
             // This prevents "nan" when ContentView.onAppear reads animatingNotchSize
             if let appDelegate = NSApp.delegate as? AppDelegate,
@@ -66,6 +67,7 @@ class BoringViewCoordinator: ObservableObject {
             }
         }
     }
+    var previousView: NotchViews = .home
     @Published var selectedChatSession: String? = nil
 
     func openChat(sessionId: String) {
